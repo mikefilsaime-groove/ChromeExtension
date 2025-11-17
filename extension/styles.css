@@ -153,49 +153,40 @@
 }
 
 .vsp-toggle-icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 12px;
   position: relative;
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .vsp-toggle-icon::before,
 .vsp-toggle-icon::after {
   content: '';
-  position: absolute;
-  top: 50%;
-  width: 5px;
-  height: 5px;
-  border: 1.5px solid #ffffff;
-  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-style: solid;
 }
 
 .vsp-controller:not(.vsp-minimized) .vsp-toggle-icon::before {
-  left: 0;
-  border-right: none;
-  border-top: none;
-  border-bottom: none;
+  border-width: 4px 0 4px 5px;
+  border-color: transparent transparent transparent #ffffff;
 }
 
 .vsp-controller:not(.vsp-minimized) .vsp-toggle-icon::after {
-  right: 0;
-  border-left: none;
-  border-top: none;
-  border-bottom: none;
+  border-width: 4px 5px 4px 0;
+  border-color: transparent #ffffff transparent transparent;
 }
 
 .vsp-controller.vsp-minimized .vsp-toggle-icon::before {
-  left: 0;
-  border-left: none;
-  border-top: none;
-  border-bottom: none;
+  border-width: 4px 5px 4px 0;
+  border-color: transparent #ffffff transparent transparent;
 }
 
 .vsp-controller.vsp-minimized .vsp-toggle-icon::after {
-  right: 0;
-  border-right: none;
-  border-top: none;
-  border-bottom: none;
+  border-width: 4px 0 4px 5px;
+  border-color: transparent transparent transparent #ffffff;
 }
 
 .vsp-controller.vsp-minimized .vsp-button {
