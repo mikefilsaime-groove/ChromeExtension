@@ -8,8 +8,10 @@ Video Speed Presets is a Chrome extension that provides a simple overlay interfa
 
 **November 17, 2025**: Minimize/maximize toggle (v1.4.0)
 - Added minimize/maximize toggle button to reduce screen clutter
-- When maximized: shows all speed preset buttons with "⋯" toggle icon
-- When minimized: shows only current speed (e.g., "2.0x") with "+" expand icon
+- Toggle button appears only on hover (like grab handles) for cleaner interface
+- When maximized: shows all speed preset buttons with inward arrows (← →) minimize icon
+- When minimized: shows only current speed (e.g., "2.0x") with outward arrows (→ ←) maximize icon
+- Icons use horizontal arrows similar to YouTube's fullscreen controls for intuitive UX
 - State persists across all videos using Chrome storage
 - Clicking toggle updates all controllers on the page simultaneously
 - Current speed display updates in real-time with playback rate changes
