@@ -10,6 +10,7 @@
   let dragState = {
     isDragging: false,
     currentContainer: null,
+    currentVideo: null,
     startX: 0,
     startY: 0,
     initialLeft: 0,
@@ -93,7 +94,7 @@
       container.style.left = savedPosition.left;
     }
 
-    setupDraggable(container);
+    setupDraggable(container, video);
     setupVideoHover(video, container);
 
     controllers.set(video, container);
@@ -125,7 +126,7 @@
     });
   }
 
-  function setupDraggable(container) {
+  function setupDraggable(container, video) {
     container.addEventListener('mousedown', (e) => {
       if (e.target.closest('.vsp-button')) {
         return;
@@ -133,6 +134,7 @@
 
       dragState.isDragging = true;
       dragState.currentContainer = container;
+      dragState.currentVideo = video;
       dragState.startX = e.clientX;
       dragState.startY = e.clientY;
       
@@ -145,13 +147,31 @@
   }
 
   function handleMouseMove(e) {
-    if (!dragState.isDragging || !dragState.currentContainer) return;
+    if (!dragState.isDragging || !dragState.currentContainer || !dragState.currentVideo) return;
 
     const deltaX = e.clientX - dragState.startX;
     const deltaY = e.clientY - dragState.startY;
 
-    const newLeft = dragState.initialLeft + deltaX;
-    const newTop = dragState.initialTop + deltaY;
+    let newLeft = dragState.initialLeft + deltaX;
+    let newTop = dragState.initialTop + deltaY;
+
+    const container = dragState.currentContainer;
+    const video = dragState.currentVideo;
+    const parent = container.offsetParent;
+
+    if (parent) {
+      const containerRect = container.getBoundingClientRect();
+      const parentRect = parent.getBoundingClientRect();
+      
+      const MARGIN = 10;
+      const minLeft = MARGIN;
+      const minTop = MARGIN;
+      const maxLeft = parentRect.width - containerRect.width - MARGIN;
+      const maxTop = parentRect.height - containerRect.height - MARGIN;
+
+      newLeft = Math.max(minLeft, Math.min(newLeft, maxLeft));
+      newTop = Math.max(minTop, Math.min(newTop, maxTop));
+    }
 
     dragState.currentContainer.style.left = `${newLeft}px`;
     dragState.currentContainer.style.top = `${newTop}px`;
@@ -172,6 +192,7 @@
       const container = dragState.currentContainer;
       dragState.isDragging = false;
       dragState.currentContainer = null;
+      dragState.currentVideo = null;
 
       const rect = container.getBoundingClientRect();
       const x = rect.left + rect.width / 2;
