@@ -3,6 +3,13 @@
 
   const PRESETS = [1.0, 1.5, 2.0, 3.0, 4.0];
   const controllers = new Map();
+  let savedPosition = null;
+
+  chrome.storage.sync.get(['controllerPosition'], (result) => {
+    if (result.controllerPosition) {
+      savedPosition = result.controllerPosition;
+    }
+  });
 
   function createController(video) {
     if (controllers.has(video)) {
@@ -50,10 +57,71 @@
       parent.insertBefore(container, video);
     }
 
+    if (savedPosition) {
+      container.style.top = savedPosition.top;
+      container.style.left = savedPosition.left;
+      container.style.right = 'auto';
+      container.style.bottom = 'auto';
+    }
+
+    makeDraggable(container);
+
     controllers.set(video, container);
 
     video.addEventListener('ratechange', () => {
       updateActiveButton(container, video.playbackRate);
+    });
+  }
+
+  function makeDraggable(container) {
+    let isDragging = false;
+    let startX, startY, initialLeft, initialTop;
+
+    container.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.vsp-button')) {
+        return;
+      }
+
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      
+      const rect = container.getBoundingClientRect();
+      initialLeft = rect.left;
+      initialTop = rect.top;
+
+      container.classList.add('vsp-dragging');
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+
+      const newLeft = initialLeft + deltaX;
+      const newTop = initialTop + deltaY;
+
+      container.style.left = `${newLeft}px`;
+      container.style.top = `${newTop}px`;
+      container.style.right = 'auto';
+      container.style.bottom = 'auto';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        container.classList.remove('vsp-dragging');
+
+        const position = {
+          top: container.style.top,
+          left: container.style.left
+        };
+        
+        savedPosition = position;
+        chrome.storage.sync.set({ controllerPosition: position });
+      }
     });
   }
 

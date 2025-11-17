@@ -16,6 +16,12 @@
   backdrop-filter: blur(8px);
   pointer-events: auto;
   transition: opacity 0.2s ease;
+  cursor: move;
+}
+
+.vsp-controller.vsp-dragging .vsp-buttons {
+  cursor: grabbing;
+  opacity: 0.8;
 }
 
 .vsp-controller:not(:hover) .vsp-buttons {

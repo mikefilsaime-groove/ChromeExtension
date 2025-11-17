@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "description": "Control HTML5 video playback speed with simple preset buttons",
   "permissions": [
-    "activeTab"
+    "activeTab",
+    "storage"
   ],
   "content_scripts": [
     {
