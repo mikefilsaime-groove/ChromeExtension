@@ -370,20 +370,43 @@
     });
   }
 
-  const observer = new MutationObserver(() => {
-    scanForVideos();
-  });
+  let observer = null;
 
-  if (document.body) {
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
+  function startObserver() {
+    if (observer) {
+      try {
+        observer.disconnect();
+      } catch (e) {
+        // Ignore disconnect errors
+      }
+    }
+
+    observer = new MutationObserver(() => {
+      scanForVideos();
     });
+
+    try {
+      if (document.body && document.body.isConnected) {
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true
+        });
+      } else {
+        setTimeout(startObserver, 100);
+      }
+    } catch (e) {
+      console.warn('VSP: Failed to observe body, retrying...', e);
+      setTimeout(startObserver, 100);
+    }
   }
 
+  startObserver();
   scanForVideos();
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', scanForVideos);
+    document.addEventListener('DOMContentLoaded', () => {
+      startObserver();
+      scanForVideos();
+    });
   }
 })();

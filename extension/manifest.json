@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Video Speed Presets",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "Control HTML5 video playback speed with simple preset buttons",
   "permissions": [
     "activeTab",
