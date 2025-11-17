@@ -309,20 +309,9 @@
       savedPosition = position;
       chrome.storage.sync.set({ controllerPosition: position });
 
-      const container = dragState.currentContainer;
       dragState.isDragging = false;
       dragState.currentContainer = null;
       dragState.currentVideo = null;
-
-      const rect = container.getBoundingClientRect();
-      const x = rect.left + rect.width / 2;
-      const y = rect.top + rect.height / 2;
-      const elementUnderCursor = document.elementFromPoint(x, y);
-      
-      if (!container.contains(elementUnderCursor) && 
-          (!elementUnderCursor || !elementUnderCursor.closest('video'))) {
-        container.classList.remove('vsp-visible');
-      }
     }
   }
 
