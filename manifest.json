@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Video Speed Presets",
+  "version": "1.0.0",
+  "description": "Control HTML5 video playback speed with simple preset buttons",
+  "permissions": [
+    "activeTab"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_end",
+      "all_frames": true
+    }
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
