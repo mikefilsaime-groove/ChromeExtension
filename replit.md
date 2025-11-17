@@ -6,6 +6,12 @@ Video Speed Presets is a Chrome extension that provides a simple overlay interfa
 
 ## Recent Changes
 
+**November 17, 2025**: Hover-to-show behavior
+- Controller is now completely hidden by default
+- Appears instantly when hovering over video (full menu, no nested hovers)
+- Disappears when mouse leaves video area for distraction-free viewing
+- Stays visible during drag operations
+
 **November 17, 2025**: Drag and position memory feature
 - Added drag-and-drop functionality to reposition controller
 - Implemented position persistence using Chrome storage API
@@ -43,7 +49,7 @@ Preferred communication style: Simple, everyday language.
 
 **Glassmorphism Overlay**: The controller uses a semi-transparent dark background with backdrop blur for a modern glassmorphic effect that remains readable over any video content while maintaining visual elegance.
 
-**Adaptive Opacity**: The controller reduces opacity when not hovered (0.6) to minimize video obstruction, then returns to full opacity on hover for better visibility during interaction.
+**Show on Hover**: The controller is completely hidden (opacity: 0) by default. When the user hovers over the video element, it smoothly fades in. When the mouse leaves both the video and controller areas, it fades out. This provides a distraction-free viewing experience while keeping controls instantly accessible.
 
 **Visual Hierarchy**: 1.0x and 2.0x speeds are styled as "prominent" with enhanced styling (larger size, bolder font, stronger background) since these are the most commonly used presets.
 
