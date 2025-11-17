@@ -22,6 +22,41 @@
   backdrop-filter: blur(8px);
   pointer-events: auto;
   cursor: move;
+  position: relative;
+}
+
+.vsp-grab-handle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.vsp-buttons:hover .vsp-grab-handle {
+  opacity: 0.4;
+}
+
+.vsp-grab-handle-left {
+  left: 2px;
+}
+
+.vsp-grab-handle-right {
+  right: 2px;
+}
+
+.vsp-grab-dot {
+  width: 2px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
 }
 
 .vsp-controller.vsp-dragging .vsp-buttons {

@@ -55,6 +55,15 @@
     const buttonsContainer = document.createElement('div');
     buttonsContainer.className = 'vsp-buttons';
 
+    const leftHandle = document.createElement('div');
+    leftHandle.className = 'vsp-grab-handle vsp-grab-handle-left';
+    for (let i = 0; i < 3; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'vsp-grab-dot';
+      leftHandle.appendChild(dot);
+    }
+    buttonsContainer.appendChild(leftHandle);
+
     PRESETS.forEach(speed => {
       const button = document.createElement('button');
       button.className = 'vsp-button';
@@ -77,6 +86,15 @@
 
       buttonsContainer.appendChild(button);
     });
+
+    const rightHandle = document.createElement('div');
+    rightHandle.className = 'vsp-grab-handle vsp-grab-handle-right';
+    for (let i = 0; i < 3; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'vsp-grab-dot';
+      rightHandle.appendChild(dot);
+    }
+    buttonsContainer.appendChild(rightHandle);
 
     container.appendChild(buttonsContainer);
 
