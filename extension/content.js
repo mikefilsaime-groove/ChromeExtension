@@ -104,26 +104,75 @@
     });
   }
 
+  const globalHoverState = {
+    mouseMoveListener: null,
+    lastMouseX: 0,
+    lastMouseY: 0,
+    refCount: 0
+  };
+
   function setupVideoHover(video, container) {
-    video.addEventListener('mouseenter', () => {
+    let checkInterval = null;
+    let outsideCount = 0;
+    const OUTSIDE_THRESHOLD = 3;
+
+    if (globalHoverState.refCount === 0) {
+      globalHoverState.mouseMoveListener = (e) => {
+        globalHoverState.lastMouseX = e.clientX;
+        globalHoverState.lastMouseY = e.clientY;
+      };
+      document.addEventListener('mousemove', globalHoverState.mouseMoveListener, { passive: true });
+    }
+    globalHoverState.refCount++;
+
+    const isInHoverZone = (x, y) => {
+      const videoRect = video.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      
+      const minX = Math.min(videoRect.left, containerRect.left);
+      const minY = Math.min(videoRect.top, containerRect.top);
+      const maxX = Math.max(videoRect.right, containerRect.right);
+      const maxY = Math.max(videoRect.bottom, containerRect.bottom);
+      
+      return x >= minX && x <= maxX && y >= minY && y <= maxY;
+    };
+
+    const startChecking = () => {
+      if (checkInterval) return;
+      
       container.classList.add('vsp-visible');
-    });
+      outsideCount = 0;
+      
+      checkInterval = setInterval(() => {
+        if (dragState.isDragging) {
+          outsideCount = 0;
+          return;
+        }
+        
+        const inZone = isInHoverZone(globalHoverState.lastMouseX, globalHoverState.lastMouseY);
 
-    video.addEventListener('mouseleave', () => {
-      if (!dragState.isDragging) {
-        container.classList.remove('vsp-visible');
+        if (!inZone) {
+          outsideCount++;
+          if (outsideCount >= OUTSIDE_THRESHOLD) {
+            stopChecking();
+          }
+        } else {
+          outsideCount = 0;
+        }
+      }, 50);
+    };
+
+    const stopChecking = () => {
+      if (checkInterval) {
+        clearInterval(checkInterval);
+        checkInterval = null;
       }
-    });
+      outsideCount = 0;
+      container.classList.remove('vsp-visible');
+    };
 
-    container.addEventListener('mouseenter', () => {
-      container.classList.add('vsp-visible');
-    });
-
-    container.addEventListener('mouseleave', () => {
-      if (!dragState.isDragging) {
-        container.classList.remove('vsp-visible');
-      }
-    });
+    video.addEventListener('mouseenter', startChecking);
+    container.addEventListener('mouseenter', startChecking);
   }
 
   function setupDraggable(container, video) {
@@ -236,6 +285,13 @@
       controller.remove();
     }
     controllers.delete(video);
+
+    globalHoverState.refCount--;
+    if (globalHoverState.refCount <= 0 && globalHoverState.mouseMoveListener) {
+      document.removeEventListener('mousemove', globalHoverState.mouseMoveListener);
+      globalHoverState.mouseMoveListener = null;
+      globalHoverState.refCount = 0;
+    }
   }
 
   function scanForVideos() {
