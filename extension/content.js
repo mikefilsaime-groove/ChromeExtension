@@ -4,15 +4,46 @@
   const PRESETS = [1.0, 1.5, 2.0, 3.0, 4.0];
   const controllers = new Map();
   let savedPosition = null;
+  let storageLoaded = false;
+  let pendingVideos = [];
+
+  let dragState = {
+    isDragging: false,
+    currentContainer: null,
+    startX: 0,
+    startY: 0,
+    initialLeft: 0,
+    initialTop: 0
+  };
 
   chrome.storage.sync.get(['controllerPosition'], (result) => {
     if (result.controllerPosition) {
       savedPosition = result.controllerPosition;
     }
+    storageLoaded = true;
+    
+    controllers.forEach((container, video) => {
+      if (savedPosition) {
+        container.style.top = savedPosition.top;
+        container.style.left = savedPosition.left;
+      }
+    });
+    
+    pendingVideos.forEach(video => {
+      createController(video);
+    });
+    pendingVideos = [];
   });
 
   function createController(video) {
     if (controllers.has(video)) {
+      return;
+    }
+
+    if (!storageLoaded) {
+      if (!pendingVideos.includes(video)) {
+        pendingVideos.push(video);
+      }
       return;
     }
 
@@ -60,11 +91,9 @@
     if (savedPosition) {
       container.style.top = savedPosition.top;
       container.style.left = savedPosition.left;
-      container.style.right = 'auto';
-      container.style.bottom = 'auto';
     }
 
-    makeDraggable(container);
+    setupDraggable(container);
 
     controllers.set(video, container);
 
@@ -73,57 +102,57 @@
     });
   }
 
-  function makeDraggable(container) {
-    let isDragging = false;
-    let startX, startY, initialLeft, initialTop;
-
+  function setupDraggable(container) {
     container.addEventListener('mousedown', (e) => {
       if (e.target.closest('.vsp-button')) {
         return;
       }
 
-      isDragging = true;
-      startX = e.clientX;
-      startY = e.clientY;
+      dragState.isDragging = true;
+      dragState.currentContainer = container;
+      dragState.startX = e.clientX;
+      dragState.startY = e.clientY;
       
-      const rect = container.getBoundingClientRect();
-      initialLeft = rect.left;
-      initialTop = rect.top;
+      dragState.initialLeft = container.offsetLeft;
+      dragState.initialTop = container.offsetTop;
 
       container.classList.add('vsp-dragging');
       e.preventDefault();
     });
-
-    document.addEventListener('mousemove', (e) => {
-      if (!isDragging) return;
-
-      const deltaX = e.clientX - startX;
-      const deltaY = e.clientY - startY;
-
-      const newLeft = initialLeft + deltaX;
-      const newTop = initialTop + deltaY;
-
-      container.style.left = `${newLeft}px`;
-      container.style.top = `${newTop}px`;
-      container.style.right = 'auto';
-      container.style.bottom = 'auto';
-    });
-
-    document.addEventListener('mouseup', () => {
-      if (isDragging) {
-        isDragging = false;
-        container.classList.remove('vsp-dragging');
-
-        const position = {
-          top: container.style.top,
-          left: container.style.left
-        };
-        
-        savedPosition = position;
-        chrome.storage.sync.set({ controllerPosition: position });
-      }
-    });
   }
+
+  function handleMouseMove(e) {
+    if (!dragState.isDragging || !dragState.currentContainer) return;
+
+    const deltaX = e.clientX - dragState.startX;
+    const deltaY = e.clientY - dragState.startY;
+
+    const newLeft = dragState.initialLeft + deltaX;
+    const newTop = dragState.initialTop + deltaY;
+
+    dragState.currentContainer.style.left = `${newLeft}px`;
+    dragState.currentContainer.style.top = `${newTop}px`;
+  }
+
+  function handleMouseUp() {
+    if (dragState.isDragging && dragState.currentContainer) {
+      dragState.currentContainer.classList.remove('vsp-dragging');
+
+      const position = {
+        top: dragState.currentContainer.style.top,
+        left: dragState.currentContainer.style.left
+      };
+      
+      savedPosition = position;
+      chrome.storage.sync.set({ controllerPosition: position });
+
+      dragState.isDragging = false;
+      dragState.currentContainer = null;
+    }
+  }
+
+  document.addEventListener('mousemove', handleMouseMove);
+  document.addEventListener('mouseup', handleMouseUp);
 
   function setVideoSpeed(video, speed, container) {
     video.playbackRate = speed;
