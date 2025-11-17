@@ -24,7 +24,7 @@ A simple Chrome extension for controlling HTML5 video playback speed with conven
 
 4. **Load the Extension**
    - Click "Load unpacked" button
-   - Select the folder containing these extension files
+   - Select the `extension` folder in this project
 
 5. **Start Using**
    - Navigate to any page with a video
@@ -56,14 +56,16 @@ Open `test.html` in your browser to test the extension with a sample video.
 
 ```
 video-speed-presets/
-├── manifest.json      # Extension configuration
-├── content.js         # Main logic and video detection
-├── styles.css         # Controller styling
-├── icon16.png         # Extension icon (16x16)
-├── icon48.png         # Extension icon (48x48)
-├── icon128.png        # Extension icon (128x128)
-├── test.html          # Test page with sample video
-└── README.md          # This file
+├── extension/
+│   ├── manifest.json      # Extension configuration
+│   ├── content.js         # Main logic and video detection
+│   ├── styles.css         # Controller styling
+│   ├── icon16.png         # Extension icon (16x16)
+│   ├── icon48.png         # Extension icon (48x48)
+│   └── icon128.png        # Extension icon (128x128)
+├── test.html              # Test page with sample video
+├── README.md              # This file
+└── replit.md              # Project documentation
 ```
 
 ## Privacy

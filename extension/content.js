@@ -2,7 +2,7 @@
   'use strict';
 
   const PRESETS = [1.0, 1.5, 2.0, 3.0, 4.0];
-  const controllers = new WeakMap();
+  const controllers = new Map();
 
   function createController(video) {
     if (controllers.has(video)) {
@@ -106,10 +106,12 @@
     scanForVideos();
   });
 
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true
-  });
+  if (document.body) {
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
 
   scanForVideos();
 
