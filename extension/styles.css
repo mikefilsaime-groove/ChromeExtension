@@ -109,3 +109,66 @@
 .vsp-button:active {
   transform: translateY(0);
 }
+
+.vsp-current-speed {
+  display: none;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 6px 12px;
+  user-select: none;
+  min-width: 48px;
+  text-align: center;
+}
+
+.vsp-toggle-button {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  outline: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+}
+
+.vsp-toggle-button:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.vsp-toggle-button:active {
+  transform: scale(0.95);
+}
+
+.vsp-toggle-icon {
+  line-height: 1;
+  display: block;
+}
+
+.vsp-controller.vsp-minimized .vsp-button {
+  display: none;
+}
+
+.vsp-controller.vsp-minimized .vsp-current-speed {
+  display: block;
+}
+
+.vsp-controller.vsp-minimized .vsp-toggle-icon::before {
+  content: '+';
+}
+
+.vsp-controller.vsp-minimized .vsp-toggle-icon {
+  font-size: 20px;
+  font-weight: 300;
+}
+
+.vsp-controller:not(.vsp-minimized) .vsp-toggle-icon::before {
+  content: '⋯';
+}

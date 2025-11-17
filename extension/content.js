@@ -4,6 +4,7 @@
   const PRESETS = [1.0, 1.5, 2.0, 3.0, 4.0];
   const controllers = new Map();
   let savedPosition = null;
+  let isMinimized = false;
   let storageLoaded = false;
   let pendingVideos = [];
 
@@ -17,9 +18,12 @@
     initialTop: 0
   };
 
-  chrome.storage.sync.get(['controllerPosition'], (result) => {
+  chrome.storage.sync.get(['controllerPosition', 'isMinimized'], (result) => {
     if (result.controllerPosition) {
       savedPosition = result.controllerPosition;
+    }
+    if (result.isMinimized !== undefined) {
+      isMinimized = result.isMinimized;
     }
     storageLoaded = true;
     
@@ -87,6 +91,21 @@
       buttonsContainer.appendChild(button);
     });
 
+    const currentSpeedDisplay = document.createElement('div');
+    currentSpeedDisplay.className = 'vsp-current-speed';
+    currentSpeedDisplay.textContent = `${video.playbackRate}x`;
+    buttonsContainer.appendChild(currentSpeedDisplay);
+
+    const toggleButton = document.createElement('button');
+    toggleButton.className = 'vsp-toggle-button';
+    toggleButton.innerHTML = '<span class="vsp-toggle-icon">⋯</span>';
+    toggleButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleMinimize(container);
+    });
+    buttonsContainer.appendChild(toggleButton);
+
     const rightHandle = document.createElement('div');
     rightHandle.className = 'vsp-grab-handle vsp-grab-handle-right';
     for (let i = 0; i < 3; i++) {
@@ -95,6 +114,10 @@
       rightHandle.appendChild(dot);
     }
     buttonsContainer.appendChild(rightHandle);
+
+    if (isMinimized) {
+      container.classList.add('vsp-minimized');
+    }
 
     container.appendChild(buttonsContainer);
 
@@ -119,7 +142,27 @@
 
     video.addEventListener('ratechange', () => {
       updateActiveButton(container, video.playbackRate);
+      updateCurrentSpeedDisplay(container, video.playbackRate);
     });
+  }
+
+  function toggleMinimize(container) {
+    isMinimized = !isMinimized;
+    
+    if (isMinimized) {
+      container.classList.add('vsp-minimized');
+    } else {
+      container.classList.remove('vsp-minimized');
+    }
+
+    chrome.storage.sync.set({ isMinimized: isMinimized });
+  }
+
+  function updateCurrentSpeedDisplay(container, speed) {
+    const display = container.querySelector('.vsp-current-speed');
+    if (display) {
+      display.textContent = `${speed}x`;
+    }
   }
 
   const globalHoverState = {
