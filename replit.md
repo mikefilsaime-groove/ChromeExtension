@@ -6,6 +6,12 @@ Video Speed Presets is a Chrome extension that provides a simple overlay interfa
 
 ## Recent Changes
 
+**November 17, 2025**: Fixed MutationObserver crash (v1.4.3)
+- Fixed critical crash that occurred 50% of the time after dragging controller
+- Added robust error handling for MutationObserver when body element gets detached
+- Observer now automatically retries if document.body is unavailable or disconnected
+- Resolves "Failed to execute 'observe' on 'MutationObserver'" TypeError on YouTube SPA navigation
+
 **November 17, 2025**: Fixed drag-and-drop freeze bug (v1.4.2)
 - Fixed critical bug where controller would become unresponsive after dragging
 - Controller now remains fully functional after being repositioned
