@@ -6,6 +6,12 @@ Video Speed Presets is a Chrome extension that provides a simple overlay interfa
 
 ## Recent Changes
 
+**November 17, 2025**: Drag and position memory feature
+- Added drag-and-drop functionality to reposition controller
+- Implemented position persistence using Chrome storage API
+- Controller remembers user's preferred position across all videos
+- Added move/grabbing cursor visual feedback
+
 **November 17, 2025**: Initial project creation
 - Created Chrome extension with Manifest V3
 - Implemented preset speed buttons (1.0x, 1.5x, 2.0x, 3.0x, 4.0x)
@@ -28,6 +34,10 @@ Preferred communication style: Simple, everyday language.
 **DOM Injection Strategy**: Controllers are injected as sibling elements to videos (inserted before the video in the parent element) rather than as overlays. The parent element's position is automatically adjusted to `relative` if it's `static`, ensuring the absolutely positioned controller displays correctly.
 
 **Event Delegation**: Each speed button has its own click handler that prevents event propagation to avoid interfering with the underlying video player's controls.
+
+**Drag-and-Drop System**: Controllers are draggable using a mousedown/mousemove/mouseup event pattern. The drag handler detects clicks outside of buttons (allowing buttons to remain clickable) and updates the controller position in real-time. Position changes are persisted to Chrome's sync storage immediately after drag completion.
+
+**Position Persistence**: Uses Chrome's `chrome.storage.sync` API to save and retrieve the controller's last position. The saved position is loaded on initialization and applied to all new video controllers, creating a consistent experience across different videos and websites.
 
 ### UI Design Pattern
 

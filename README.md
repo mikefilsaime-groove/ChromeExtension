@@ -6,7 +6,9 @@ A simple Chrome extension for controlling HTML5 video playback speed with conven
 
 - **Preset Speed Buttons**: Quick access to 1.0x, 1.5x, 2.0x, 3.0x, and 4.0x speeds
 - **Prominent 1.0x & 2.0x**: The most commonly used speeds are highlighted
-- **Clean UI**: Minimalist overlay that appears in the top-left corner of videos
+- **Draggable Controller**: Click and drag to reposition anywhere on the video
+- **Position Memory**: Your preferred position is saved and remembered across all videos
+- **Clean UI**: Minimalist overlay that appears in the top-left corner of videos (by default)
 - **Universal Compatibility**: Works on any website with HTML5 video (YouTube, Netflix, Vimeo, etc.)
 - **Active Speed Indicator**: Current speed is highlighted in blue
 - **Auto-Detection**: Automatically finds all videos on any page
@@ -43,6 +45,8 @@ A simple Chrome extension for controlling HTML5 video playback speed with conven
 
 ### Tips
 
+- **Drag to Reposition**: Click and drag the controller to move it anywhere on the video
+- **Position Saved**: Once you move it, all future videos will remember your preferred position
 - Hover over the video to see the controller clearly
 - The active speed is highlighted in blue
 - The controller adapts to work with any video player
