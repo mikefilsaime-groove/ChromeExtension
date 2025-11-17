@@ -6,6 +6,12 @@ Video Speed Presets is a Chrome extension that provides a simple overlay interfa
 
 ## Recent Changes
 
+**November 17, 2025**: Visual grab handles (v1.3.2)
+- Added subtle grab handles on left and right sides of controller
+- Handles appear when hovering over the controller
+- Provides clear visual indication that the controller is draggable
+- Three-dot design that fades in smoothly without interfering with functionality
+
 **November 17, 2025**: Hover stability fix (v1.3.1)
 - Fixed critical bug where controller would disappear when trying to hover over it on some YouTube videos
 - Implemented bounding-box hover zone that encompasses both video and controller
