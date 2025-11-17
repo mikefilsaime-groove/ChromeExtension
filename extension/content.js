@@ -164,8 +164,8 @@
       const videoRect = video.getBoundingClientRect();
       const parentRect = parent.getBoundingClientRect();
       
-      const videoLeftInParent = videoRect.left - parentRect.left;
-      const videoTopInParent = videoRect.top - parentRect.top;
+      const videoLeftInParent = videoRect.left - parentRect.left - parent.clientLeft + parent.scrollLeft;
+      const videoTopInParent = videoRect.top - parentRect.top - parent.clientTop + parent.scrollTop;
       
       const MARGIN = 10;
       const minLeft = videoLeftInParent + MARGIN;

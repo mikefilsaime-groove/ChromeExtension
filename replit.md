@@ -6,6 +6,12 @@ Video Speed Presets is a Chrome extension that provides a simple overlay interfa
 
 ## Recent Changes
 
+**November 17, 2025**: Drag boundary constraints (v1.3.0)
+- Fixed critical bug where controller could be dragged outside video and get lost
+- Controller now constrained to stay within video bounds with 10px margin on all edges
+- Prevents controller from being positioned where user can't find it
+- Accounts for parent padding, borders, and scroll when calculating boundaries
+
 **November 17, 2025**: Hover-to-show behavior
 - Controller is now completely hidden by default
 - Appears instantly when hovering over video (full menu, no nested hovers)
