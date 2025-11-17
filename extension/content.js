@@ -159,15 +159,19 @@
     const video = dragState.currentVideo;
     const parent = container.offsetParent;
 
-    if (parent) {
+    if (parent && video) {
       const containerRect = container.getBoundingClientRect();
+      const videoRect = video.getBoundingClientRect();
       const parentRect = parent.getBoundingClientRect();
       
+      const videoLeftInParent = videoRect.left - parentRect.left;
+      const videoTopInParent = videoRect.top - parentRect.top;
+      
       const MARGIN = 10;
-      const minLeft = MARGIN;
-      const minTop = MARGIN;
-      const maxLeft = parentRect.width - containerRect.width - MARGIN;
-      const maxTop = parentRect.height - containerRect.height - MARGIN;
+      const minLeft = videoLeftInParent + MARGIN;
+      const minTop = videoTopInParent + MARGIN;
+      const maxLeft = videoLeftInParent + videoRect.width - containerRect.width - MARGIN;
+      const maxTop = videoTopInParent + videoRect.height - containerRect.height - MARGIN;
 
       newLeft = Math.max(minLeft, Math.min(newLeft, maxLeft));
       newTop = Math.max(minTop, Math.min(newTop, maxTop));
