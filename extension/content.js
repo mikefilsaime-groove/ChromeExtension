@@ -98,7 +98,9 @@
 
     const toggleButton = document.createElement('button');
     toggleButton.className = 'vsp-toggle-button';
-    toggleButton.innerHTML = '<span class="vsp-toggle-icon">⋯</span>';
+    const toggleIcon = document.createElement('span');
+    toggleIcon.className = 'vsp-toggle-icon';
+    toggleButton.appendChild(toggleIcon);
     toggleButton.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -149,11 +151,13 @@
   function toggleMinimize(container) {
     isMinimized = !isMinimized;
     
-    if (isMinimized) {
-      container.classList.add('vsp-minimized');
-    } else {
-      container.classList.remove('vsp-minimized');
-    }
+    controllers.forEach((ctrl) => {
+      if (isMinimized) {
+        ctrl.classList.add('vsp-minimized');
+      } else {
+        ctrl.classList.remove('vsp-minimized');
+      }
+    });
 
     chrome.storage.sync.set({ isMinimized: isMinimized });
   }
@@ -238,7 +242,9 @@
 
   function setupDraggable(container, video) {
     container.addEventListener('mousedown', (e) => {
-      if (e.target.closest('.vsp-button')) {
+      if (e.target.closest('.vsp-button') || 
+          e.target.closest('.vsp-toggle-button') ||
+          e.target.closest('.vsp-current-speed')) {
         return;
       }
 
