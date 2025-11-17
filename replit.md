@@ -6,6 +6,12 @@ Video Speed Presets is a Chrome extension that provides a simple overlay interfa
 
 ## Recent Changes
 
+**November 17, 2025**: Fixed drag-and-drop freeze bug (v1.4.2)
+- Fixed critical bug where controller would become unresponsive after dragging
+- Controller now remains fully functional after being repositioned
+- Removed conflicting visibility logic in handleMouseUp that was causing the freeze
+- Hover detection system now works correctly after drag operations
+
 **November 17, 2025**: Minimize/maximize toggle (v1.4.0)
 - Added minimize/maximize toggle button to reduce screen clutter
 - Toggle button appears only on hover (like grab handles) for cleaner interface
