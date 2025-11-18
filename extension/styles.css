@@ -125,21 +125,24 @@
   background: rgba(255, 255, 255, 0.15);
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: #ffffff;
-  padding: 6px 8px;
+  padding: 6px 0;
   border-radius: 4px;
   cursor: pointer;
-  transition: all 0.15s ease;
   user-select: none;
   outline: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
   opacity: 0;
-  transition: opacity 0.2s ease, background 0.15s ease, border-color 0.15s ease;
+  transition: width 0.2s ease, opacity 0.2s ease, padding 0.2s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
 .vsp-buttons:hover .vsp-toggle-button {
+  width: 28px;
+  padding: 6px 8px;
   opacity: 1;
 }
 
@@ -198,6 +201,8 @@
 }
 
 .vsp-controller.vsp-minimized .vsp-toggle-button {
+  width: 28px;
+  padding: 6px 8px;
   opacity: 1;
 }
 
