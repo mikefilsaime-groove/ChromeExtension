@@ -6,6 +6,12 @@ Video Speed Presets is a Chrome extension that provides a simple overlay interfa
 
 ## Recent Changes
 
+**November 18, 2025**: Fixed MutationObserver crash on drag (v1.5.1)
+- Fixed critical crash that occurred during drag operations on YouTube
+- Changed observer to watch document.documentElement instead of document.body
+- Eliminates "Failed to execute 'observe' on 'MutationObserver'" errors during SPA navigation
+- Observer now stays connected through all YouTube page transitions
+
 **November 18, 2025**: Contextual speed dial in collapsed mode (v1.5.0)
 - Added vertical speed dial that appears when clicking current speed in collapsed mode
 - Shows "where you are" on the speed dial with adjacent speeds above and below
