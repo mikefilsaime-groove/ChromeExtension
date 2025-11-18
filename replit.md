@@ -6,6 +6,13 @@ Video Speed Presets is a Chrome extension that provides a simple overlay interfa
 
 ## Recent Changes
 
+**November 18, 2025**: Speed preference memory (v1.6.0)
+- Extension now remembers your preferred playback speed across videos and page refreshes
+- Set speed to 2.0x once, and all future videos will automatically play at 2.0x
+- Speed preference syncs across all Chrome tabs using Chrome's sync storage
+- UI (active button highlight and speed display) correctly reflects saved speed on load
+- Works seamlessly with minimize/maximize toggle and position memory
+
 **November 18, 2025**: Fixed MutationObserver crash on drag (v1.5.1)
 - Fixed critical crash that occurred during drag operations on YouTube
 - Changed observer to watch document.documentElement instead of document.body
