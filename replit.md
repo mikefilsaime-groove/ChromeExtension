@@ -6,6 +6,15 @@ Video Speed Presets is a Chrome extension that provides a simple overlay interfa
 
 ## Recent Changes
 
+**November 18, 2025**: Contextual speed dial in collapsed mode (v1.5.0)
+- Added vertical speed dial that appears when clicking current speed in collapsed mode
+- Shows "where you are" on the speed dial with adjacent speeds above and below
+- At 1.0x: shows only speeds below (dropdown)
+- At 4.0x: shows only speeds above (dropup)
+- Current speed highlighted in blue when dial is active
+- Auto-closes when selecting a new speed or clicking outside
+- Glassmorphic design matches existing controller aesthetic
+
 **November 17, 2025**: Fixed MutationObserver crash (v1.4.3)
 - Fixed critical crash that occurred 50% of the time after dragging controller
 - Added robust error handling for MutationObserver when body element gets detached
