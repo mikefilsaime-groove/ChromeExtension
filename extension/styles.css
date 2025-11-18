@@ -200,3 +200,96 @@
 .vsp-controller.vsp-minimized .vsp-toggle-button {
   opacity: 1;
 }
+
+.vsp-current-speed {
+  cursor: pointer;
+  transition: background 0.15s ease;
+  border-radius: 4px;
+}
+
+.vsp-controller.vsp-minimized .vsp-current-speed:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.vsp-speed-dial {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: 4px;
+  background: rgba(0, 0, 0, 0.85);
+  border-radius: 6px;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  animation: vsp-dial-appear 0.15s ease-out;
+  pointer-events: auto;
+}
+
+.vsp-speed-dial.vsp-dial-dropup {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: 4px;
+  animation: vsp-dial-appear-up 0.15s ease-out;
+}
+
+@keyframes vsp-dial-appear-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes vsp-dial-appear {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.vsp-dial-option {
+  display: block;
+  width: 100%;
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  user-select: none;
+  outline: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  min-width: 60px;
+}
+
+.vsp-dial-option:last-child {
+  border-bottom: none;
+}
+
+.vsp-dial-option:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.vsp-dial-option.vsp-dial-current {
+  background: rgba(100, 150, 255, 0.9);
+  font-weight: 600;
+  color: #ffffff;
+  cursor: default;
+}
+
+.vsp-dial-option.vsp-dial-current:hover {
+  background: rgba(100, 150, 255, 0.9);
+}

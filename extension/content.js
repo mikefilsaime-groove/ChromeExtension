@@ -94,6 +94,11 @@
     const currentSpeedDisplay = document.createElement('div');
     currentSpeedDisplay.className = 'vsp-current-speed';
     currentSpeedDisplay.textContent = `${video.playbackRate}x`;
+    currentSpeedDisplay.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleSpeedDial(container, video);
+    });
     buttonsContainer.appendChild(currentSpeedDisplay);
 
     const toggleButton = document.createElement('button');
@@ -167,6 +172,78 @@
     if (display) {
       display.textContent = `${speed}x`;
     }
+  }
+
+  function toggleSpeedDial(container, video) {
+    let dial = container.querySelector('.vsp-speed-dial');
+    
+    if (dial) {
+      dial.remove();
+      return;
+    }
+
+    const currentSpeed = video.playbackRate;
+    const currentIndex = PRESETS.findIndex(speed => Math.abs(speed - currentSpeed) < 0.01);
+    
+    if (currentIndex === -1) return;
+
+    dial = document.createElement('div');
+    dial.className = 'vsp-speed-dial';
+
+    const speedsAbove = PRESETS.slice(0, currentIndex).reverse();
+    const speedsBelow = PRESETS.slice(currentIndex + 1);
+
+    if (speedsBelow.length === 0 && speedsAbove.length > 0) {
+      dial.classList.add('vsp-dial-dropup');
+    }
+
+    speedsAbove.forEach(speed => {
+      const option = createDialOption(speed, false, video, container);
+      dial.appendChild(option);
+    });
+
+    const currentOption = createDialOption(currentSpeed, true, video, container);
+    dial.appendChild(currentOption);
+
+    speedsBelow.forEach(speed => {
+      const option = createDialOption(speed, false, video, container);
+      dial.appendChild(option);
+    });
+
+    container.appendChild(dial);
+
+    document.addEventListener('click', function closeDialOutside(e) {
+      if (!dial.contains(e.target) && !e.target.closest('.vsp-current-speed')) {
+        dial.remove();
+        document.removeEventListener('click', closeDialOutside);
+      }
+    });
+  }
+
+  function createDialOption(speed, isCurrent, video, container) {
+    const option = document.createElement('button');
+    option.className = 'vsp-dial-option';
+    option.textContent = `${speed}x`;
+    
+    if (isCurrent) {
+      option.classList.add('vsp-dial-current');
+    }
+
+    option.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      if (!isCurrent) {
+        setVideoSpeed(video, speed, container);
+      }
+      
+      const dial = container.querySelector('.vsp-speed-dial');
+      if (dial) {
+        dial.remove();
+      }
+    });
+
+    return option;
   }
 
   const globalHoverState = {
