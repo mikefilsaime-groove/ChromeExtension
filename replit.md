@@ -14,6 +14,7 @@ Video Speed Presets is a Chrome extension that provides a simple overlay interfa
 - Current speed highlighted in blue when dial is active
 - Auto-closes when selecting a new speed or clicking outside
 - Glassmorphic design matches existing controller aesthetic
+- Fixed toggle button to slide in on hover instead of taking up space when hidden
 
 **November 17, 2025**: Fixed MutationObserver crash (v1.4.3)
 - Fixed critical crash that occurred 50% of the time after dragging controller
