@@ -447,24 +447,24 @@
     });
   }
 
-  let observer = null;
+  const observer = new MutationObserver(() => {
+    try {
+      scanForVideos();
+    } catch (e) {
+      console.warn('VSP: Error scanning for videos:', e);
+    }
+  });
 
   function startObserver() {
-    if (observer) {
-      try {
-        observer.disconnect();
-      } catch (e) {
-        // Ignore disconnect errors
-      }
+    try {
+      observer.disconnect();
+    } catch (e) {
+      // Ignore disconnect errors
     }
 
-    observer = new MutationObserver(() => {
-      scanForVideos();
-    });
-
     try {
-      if (document.body && document.body.isConnected) {
-        observer.observe(document.body, {
+      if (document.documentElement) {
+        observer.observe(document.documentElement, {
           childList: true,
           subtree: true
         });
@@ -472,7 +472,7 @@
         setTimeout(startObserver, 100);
       }
     } catch (e) {
-      console.warn('VSP: Failed to observe body, retrying...', e);
+      console.warn('VSP: Failed to start observer, retrying...', e);
       setTimeout(startObserver, 100);
     }
   }
