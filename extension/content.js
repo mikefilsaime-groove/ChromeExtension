@@ -5,6 +5,7 @@
   const controllers = new Map();
   let savedPosition = null;
   let isMinimized = false;
+  let preferredSpeed = 1.0;
   let storageLoaded = false;
   let pendingVideos = [];
 
@@ -18,12 +19,15 @@
     initialTop: 0
   };
 
-  chrome.storage.sync.get(['controllerPosition', 'isMinimized'], (result) => {
+  chrome.storage.sync.get(['controllerPosition', 'isMinimized', 'preferredSpeed'], (result) => {
     if (result.controllerPosition) {
       savedPosition = result.controllerPosition;
     }
     if (result.isMinimized !== undefined) {
       isMinimized = result.isMinimized;
+    }
+    if (result.preferredSpeed !== undefined) {
+      preferredSpeed = result.preferredSpeed;
     }
     storageLoaded = true;
     
@@ -151,6 +155,12 @@
       updateActiveButton(container, video.playbackRate);
       updateCurrentSpeedDisplay(container, video.playbackRate);
     });
+
+    if (preferredSpeed && preferredSpeed !== 1.0) {
+      video.playbackRate = preferredSpeed;
+      updateActiveButton(container, preferredSpeed);
+      updateCurrentSpeedDisplay(container, preferredSpeed);
+    }
   }
 
   function toggleMinimize(container) {
@@ -398,6 +408,9 @@
   function setVideoSpeed(video, speed, container) {
     video.playbackRate = speed;
     updateActiveButton(container, speed);
+    
+    preferredSpeed = speed;
+    chrome.storage.sync.set({ preferredSpeed: speed });
   }
 
   function updateActiveButton(container, currentSpeed) {
