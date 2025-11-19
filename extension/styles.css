@@ -113,11 +113,11 @@
 .vsp-current-speed {
   display: none;
   color: #ffffff;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
-  padding: 6px 12px;
+  padding: 3px 6px;
   user-select: none;
-  min-width: 48px;
+  min-width: 38px;
   text-align: center;
 }
 
@@ -201,8 +201,8 @@
 }
 
 .vsp-controller.vsp-minimized .vsp-toggle-button {
-  width: 28px;
-  padding: 6px 8px;
+  width: 24px;
+  padding: 3px 6px;
   opacity: 1;
 }
 
