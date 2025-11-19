@@ -6,6 +6,12 @@ Video Speed Presets is a Chrome extension that provides a simple overlay interfa
 
 ## Recent Changes
 
+**November 19, 2025**: Bug fixes for minimize/maximize and settings modal (v1.7.1)
+- Fixed minimize/maximize toggle not preserving state when settings are changed
+- Fixed settings modal Save/Cancel buttons causing browser crashes
+- Minimized mode now properly maintained when customizing speed presets
+- Improved event handling to prevent propagation issues
+
 **November 18, 2025**: Customizable Speed Presets & Auto-Hide on Idle (v1.7.0)
 - Added settings gear (⚙️) button to customize which speed presets to display
 - Choose from 12 available speeds: 0.25x, 0.5x, 0.75x, 1.0x, 1.25x, 1.5x, 1.75x, 2.0x, 2.5x, 3.0x, 3.5x, 4.0x

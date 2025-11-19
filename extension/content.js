@@ -245,7 +245,8 @@
     const saveButton = document.createElement('button');
     saveButton.textContent = 'Save';
     saveButton.className = 'vsp-settings-save';
-    saveButton.addEventListener('click', () => {
+    saveButton.addEventListener('click', (e) => {
+      e.stopPropagation();
       const checkboxes = modal.querySelectorAll('.vsp-checkbox');
       const newSpeeds = [];
       checkboxes.forEach(cb => {
@@ -264,17 +265,19 @@
       PRESETS = [...newSpeeds];
       chrome.storage.sync.set({ customSpeeds: newSpeeds });
 
-      controllers.forEach((container, video) => {
+      const controllersToRecreate = Array.from(controllers.entries());
+      overlay.remove();
+      
+      controllersToRecreate.forEach(([video, container]) => {
         recreateController(video, container);
       });
-
-      overlay.remove();
     });
 
     const cancelButton = document.createElement('button');
     cancelButton.textContent = 'Cancel';
     cancelButton.className = 'vsp-settings-cancel';
-    cancelButton.addEventListener('click', () => {
+    cancelButton.addEventListener('click', (e) => {
+      e.stopPropagation();
       overlay.remove();
     });
 
@@ -294,6 +297,7 @@
 
   function recreateController(video, oldContainer) {
     const wasVisible = oldContainer.classList.contains('vsp-visible');
+    const wasMinimized = oldContainer.classList.contains('vsp-minimized');
     const position = {
       top: oldContainer.style.top,
       left: oldContainer.style.left
@@ -303,12 +307,17 @@
     createController(video);
 
     const newContainer = controllers.get(video);
-    if (newContainer && wasVisible) {
-      newContainer.classList.add('vsp-visible');
-    }
-    if (position.top && position.left) {
-      newContainer.style.top = position.top;
-      newContainer.style.left = position.left;
+    if (newContainer) {
+      if (wasVisible) {
+        newContainer.classList.add('vsp-visible');
+      }
+      if (wasMinimized) {
+        newContainer.classList.add('vsp-minimized');
+      }
+      if (position.top && position.left) {
+        newContainer.style.top = position.top;
+        newContainer.style.left = position.left;
+      }
     }
   }
 
