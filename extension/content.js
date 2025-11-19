@@ -1,11 +1,14 @@
 (function() {
   'use strict';
 
-  const PRESETS = [1.0, 1.5, 2.0, 3.0, 4.0];
+  const ALL_SPEEDS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 3.5, 4.0];
+  const DEFAULT_PRESETS = [1.0, 1.5, 2.0, 3.0, 4.0];
+  let PRESETS = [...DEFAULT_PRESETS];
   const controllers = new Map();
   let savedPosition = null;
   let isMinimized = false;
   let preferredSpeed = 1.0;
+  let customSpeeds = null;
   let storageLoaded = false;
   let pendingVideos = [];
 
@@ -19,7 +22,7 @@
     initialTop: 0
   };
 
-  chrome.storage.sync.get(['controllerPosition', 'isMinimized', 'preferredSpeed'], (result) => {
+  chrome.storage.sync.get(['controllerPosition', 'isMinimized', 'preferredSpeed', 'customSpeeds'], (result) => {
     if (result.controllerPosition) {
       savedPosition = result.controllerPosition;
     }
@@ -28,6 +31,10 @@
     }
     if (result.preferredSpeed !== undefined) {
       preferredSpeed = result.preferredSpeed;
+    }
+    if (result.customSpeeds && result.customSpeeds.length > 0) {
+      customSpeeds = result.customSpeeds;
+      PRESETS = [...customSpeeds];
     }
     storageLoaded = true;
     
@@ -105,6 +112,17 @@
     });
     buttonsContainer.appendChild(currentSpeedDisplay);
 
+    const settingsButton = document.createElement('button');
+    settingsButton.className = 'vsp-settings-button';
+    settingsButton.innerHTML = '⚙️';
+    settingsButton.setAttribute('title', 'Customize Speed Presets');
+    settingsButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openSettingsModal();
+    });
+    buttonsContainer.appendChild(settingsButton);
+
     const toggleButton = document.createElement('button');
     toggleButton.className = 'vsp-toggle-button';
     const toggleIcon = document.createElement('span');
@@ -175,6 +193,123 @@
     });
 
     chrome.storage.sync.set({ isMinimized: isMinimized });
+  }
+
+  function openSettingsModal() {
+    if (document.querySelector('.vsp-settings-modal')) return;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'vsp-settings-overlay';
+
+    const modal = document.createElement('div');
+    modal.className = 'vsp-settings-modal';
+
+    const title = document.createElement('h3');
+    title.textContent = 'Customize Speed Presets';
+    title.className = 'vsp-settings-title';
+    modal.appendChild(title);
+
+    const subtitle = document.createElement('p');
+    subtitle.textContent = 'Select which speeds to show in the controller:';
+    subtitle.className = 'vsp-settings-subtitle';
+    modal.appendChild(subtitle);
+
+    const checkboxContainer = document.createElement('div');
+    checkboxContainer.className = 'vsp-checkbox-container';
+
+    const selectedSpeeds = customSpeeds || [...DEFAULT_PRESETS];
+
+    ALL_SPEEDS.forEach(speed => {
+      const label = document.createElement('label');
+      label.className = 'vsp-checkbox-label';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'vsp-checkbox';
+      checkbox.value = speed;
+      checkbox.checked = selectedSpeeds.includes(speed);
+
+      const text = document.createElement('span');
+      text.textContent = `${speed}x`;
+
+      label.appendChild(checkbox);
+      label.appendChild(text);
+      checkboxContainer.appendChild(label);
+    });
+
+    modal.appendChild(checkboxContainer);
+
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'vsp-settings-buttons';
+
+    const saveButton = document.createElement('button');
+    saveButton.textContent = 'Save';
+    saveButton.className = 'vsp-settings-save';
+    saveButton.addEventListener('click', () => {
+      const checkboxes = modal.querySelectorAll('.vsp-checkbox');
+      const newSpeeds = [];
+      checkboxes.forEach(cb => {
+        if (cb.checked) {
+          newSpeeds.push(parseFloat(cb.value));
+        }
+      });
+
+      if (newSpeeds.length === 0) {
+        alert('Please select at least one speed preset.');
+        return;
+      }
+
+      newSpeeds.sort((a, b) => a - b);
+      customSpeeds = newSpeeds;
+      PRESETS = [...newSpeeds];
+      chrome.storage.sync.set({ customSpeeds: newSpeeds });
+
+      controllers.forEach((container, video) => {
+        recreateController(video, container);
+      });
+
+      overlay.remove();
+    });
+
+    const cancelButton = document.createElement('button');
+    cancelButton.textContent = 'Cancel';
+    cancelButton.className = 'vsp-settings-cancel';
+    cancelButton.addEventListener('click', () => {
+      overlay.remove();
+    });
+
+    buttonContainer.appendChild(saveButton);
+    buttonContainer.appendChild(cancelButton);
+    modal.appendChild(buttonContainer);
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        overlay.remove();
+      }
+    });
+  }
+
+  function recreateController(video, oldContainer) {
+    const wasVisible = oldContainer.classList.contains('vsp-visible');
+    const position = {
+      top: oldContainer.style.top,
+      left: oldContainer.style.left
+    };
+
+    removeController(video);
+    createController(video);
+
+    const newContainer = controllers.get(video);
+    if (newContainer && wasVisible) {
+      newContainer.classList.add('vsp-visible');
+    }
+    if (position.top && position.left) {
+      newContainer.style.top = position.top;
+      newContainer.style.left = position.left;
+    }
   }
 
   function updateCurrentSpeedDisplay(container, speed) {
@@ -260,18 +395,21 @@
     mouseMoveListener: null,
     lastMouseX: 0,
     lastMouseY: 0,
+    lastMoveTime: Date.now(),
     refCount: 0
   };
 
   function setupVideoHover(video, container) {
     let checkInterval = null;
     let outsideCount = 0;
+    let wasHiddenByIdle = false;
     const OUTSIDE_THRESHOLD = 3;
 
     if (globalHoverState.refCount === 0) {
       globalHoverState.mouseMoveListener = (e) => {
         globalHoverState.lastMouseX = e.clientX;
         globalHoverState.lastMouseY = e.clientY;
+        globalHoverState.lastMoveTime = Date.now();
       };
       document.addEventListener('mousemove', globalHoverState.mouseMoveListener, { passive: true });
     }
@@ -293,6 +431,7 @@
       if (checkInterval) return;
       
       container.classList.add('vsp-visible');
+      wasHiddenByIdle = false;
       outsideCount = 0;
       
       checkInterval = setInterval(() => {
@@ -302,25 +441,47 @@
         }
         
         const inZone = isInHoverZone(globalHoverState.lastMouseX, globalHoverState.lastMouseY);
+        const idleTime = Date.now() - globalHoverState.lastMoveTime;
+        const isIdle = idleTime > 2500;
 
         if (!inZone) {
           outsideCount++;
           if (outsideCount >= OUTSIDE_THRESHOLD) {
-            stopChecking();
+            stopChecking(false);
           }
+        } else if (isIdle) {
+          stopChecking(true);
         } else {
           outsideCount = 0;
+          if (wasHiddenByIdle && container.classList.contains('vsp-visible') === false) {
+            startChecking();
+          }
         }
       }, 50);
     };
 
-    const stopChecking = () => {
+    const stopChecking = (hiddenByIdle) => {
       if (checkInterval) {
         clearInterval(checkInterval);
         checkInterval = null;
       }
       outsideCount = 0;
+      wasHiddenByIdle = hiddenByIdle;
       container.classList.remove('vsp-visible');
+      
+      if (hiddenByIdle) {
+        setTimeout(() => {
+          const inZone = isInHoverZone(globalHoverState.lastMouseX, globalHoverState.lastMouseY);
+          const idleTime = Date.now() - globalHoverState.lastMoveTime;
+          const isStillIdle = idleTime > 2500;
+          
+          if (inZone && !isStillIdle) {
+            startChecking();
+          } else if (inZone) {
+            stopChecking(true);
+          }
+        }, 100);
+      }
     };
 
     video.addEventListener('mouseenter', startChecking);
@@ -331,6 +492,7 @@
     container.addEventListener('mousedown', (e) => {
       if (e.target.closest('.vsp-button') || 
           e.target.closest('.vsp-toggle-button') ||
+          e.target.closest('.vsp-settings-button') ||
           e.target.closest('.vsp-current-speed')) {
         return;
       }
