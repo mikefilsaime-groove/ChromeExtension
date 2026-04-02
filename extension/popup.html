@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="vsp-popup">
+    <div class="vsp-popup-header">
+      <div class="vsp-popup-title">Video Speed</div>
+      <div class="vsp-popup-current" id="currentSpeed">1.0x</div>
+    </div>
+
+    <div class="vsp-popup-speeds" id="speedButtons"></div>
+
+    <div class="vsp-popup-divider"></div>
+
+    <div class="vsp-popup-section">
+      <div class="vsp-popup-toggle">
+        <span>Compact Mode</span>
+        <label class="vsp-switch">
+          <input type="checkbox" id="compactToggle">
+          <span class="vsp-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="vsp-popup-divider"></div>
+
+    <div class="vsp-popup-section vsp-popup-shortcuts">
+      <div class="vsp-popup-shortcut-title">Keyboard Shortcuts</div>
+      <div class="vsp-popup-shortcut"><kbd>S</kbd> Slower</div>
+      <div class="vsp-popup-shortcut"><kbd>D</kbd> Faster</div>
+      <div class="vsp-popup-shortcut"><kbd>R</kbd> Reset 1x</div>
+      <div class="vsp-popup-shortcut"><kbd>Shift+S/D</kbd> Fine tune</div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

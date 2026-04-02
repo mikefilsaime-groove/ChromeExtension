@@ -5,7 +5,8 @@
   const DEFAULT_PRESETS = [1.0, 1.5, 2.0, 3.0, 4.0];
   let PRESETS = [...DEFAULT_PRESETS];
   const controllers = new Map();
-  let savedPosition = null;
+  let savedOffset = { x: 10, y: 10 };
+  let positionRAF = null;
   let isMinimized = false;
   let preferredSpeed = 1.0;
   let customSpeeds = null;
@@ -22,9 +23,11 @@
     initialTop: 0
   };
 
-  chrome.storage.sync.get(['controllerPosition', 'isMinimized', 'preferredSpeed', 'customSpeeds'], (result) => {
-    if (result.controllerPosition) {
-      savedPosition = result.controllerPosition;
+  chrome.storage.sync.get(['controllerOffset', 'controllerPosition', 'isMinimized', 'preferredSpeed', 'customSpeeds'], (result) => {
+    if (result.controllerOffset) {
+      savedOffset = result.controllerOffset;
+    } else if (result.controllerPosition) {
+      savedOffset = { x: parseFloat(result.controllerPosition.left) || 10, y: parseFloat(result.controllerPosition.top) || 10 };
     }
     if (result.isMinimized !== undefined) {
       isMinimized = result.isMinimized;
@@ -37,14 +40,7 @@
       PRESETS = [...customSpeeds];
     }
     storageLoaded = true;
-    
-    controllers.forEach((container, video) => {
-      if (savedPosition) {
-        container.style.top = savedPosition.top;
-        container.style.left = savedPosition.left;
-      }
-    });
-    
+
     pendingVideos.forEach(video => {
       createController(video);
     });
@@ -150,29 +146,24 @@
 
     container.appendChild(buttonsContainer);
 
-    const parent = video.parentElement;
-    if (parent) {
-      const style = window.getComputedStyle(parent);
-      if (style.position === 'static') {
-        parent.style.position = 'relative';
-      }
-      parent.insertBefore(container, video);
-    }
-
-    if (savedPosition) {
-      container.style.top = savedPosition.top;
-      container.style.left = savedPosition.left;
-    }
+    document.body.appendChild(container);
+    updateControllerPosition(video, container);
 
     setupDraggable(container, video);
     setupVideoHover(video, container);
 
     controllers.set(video, container);
 
-    video.addEventListener('ratechange', () => {
+    if (!positionRAF) {
+      startPositionLoop();
+    }
+
+    const ratechangeHandler = () => {
       updateActiveButton(container, video.playbackRate);
       updateCurrentSpeedDisplay(container, video.playbackRate);
-    });
+    };
+    video.addEventListener('ratechange', ratechangeHandler);
+    container._ratechangeHandler = ratechangeHandler;
 
     if (preferredSpeed && preferredSpeed !== 1.0) {
       video.playbackRate = preferredSpeed;
@@ -256,7 +247,13 @@
       });
 
       if (newSpeeds.length === 0) {
-        alert('Please select at least one speed preset.');
+        let warning = modal.querySelector('.vsp-settings-warning');
+        if (!warning) {
+          warning = document.createElement('div');
+          warning.className = 'vsp-settings-warning';
+          warning.textContent = 'Please select at least one speed.';
+          buttonContainer.insertAdjacentElement('beforebegin', warning);
+        }
         return;
       }
 
@@ -298,10 +295,6 @@
   function recreateController(video, oldContainer) {
     const wasVisible = oldContainer.classList.contains('vsp-visible');
     const wasMinimized = oldContainer.classList.contains('vsp-minimized');
-    const position = {
-      top: oldContainer.style.top,
-      left: oldContainer.style.left
-    };
 
     removeController(video);
     createController(video);
@@ -313,10 +306,6 @@
       }
       if (wasMinimized) {
         newContainer.classList.add('vsp-minimized');
-      }
-      if (position.top && position.left) {
-        newContainer.style.top = position.top;
-        newContainer.style.left = position.left;
       }
     }
   }
@@ -344,23 +333,9 @@
     dial = document.createElement('div');
     dial.className = 'vsp-speed-dial';
 
-    const speedsAbove = PRESETS.slice(0, currentIndex).reverse();
-    const speedsBelow = PRESETS.slice(currentIndex + 1);
-
-    if (speedsBelow.length === 0 && speedsAbove.length > 0) {
-      dial.classList.add('vsp-dial-dropup');
-    }
-
-    speedsAbove.forEach(speed => {
-      const option = createDialOption(speed, false, video, container);
-      dial.appendChild(option);
-    });
-
-    const currentOption = createDialOption(currentSpeed, true, video, container);
-    dial.appendChild(currentOption);
-
-    speedsBelow.forEach(speed => {
-      const option = createDialOption(speed, false, video, container);
+    PRESETS.forEach(speed => {
+      const isCurrent = Math.abs(speed - currentSpeed) < 0.01;
+      const option = createDialOption(speed, isCurrent, video, container);
       dial.appendChild(option);
     });
 
@@ -398,6 +373,31 @@
     });
 
     return option;
+  }
+
+  function updateControllerPosition(video, container) {
+    if (dragState.isDragging && dragState.currentContainer === container) return;
+    const videoRect = video.getBoundingClientRect();
+    const newLeft = videoRect.left + savedOffset.x;
+    const newTop = videoRect.top + savedOffset.y;
+    if (container._lastLeft !== newLeft || container._lastTop !== newTop) {
+      container.style.left = `${newLeft}px`;
+      container.style.top = `${newTop}px`;
+      container._lastLeft = newLeft;
+      container._lastTop = newTop;
+    }
+  }
+
+  function startPositionLoop() {
+    function update() {
+      controllers.forEach((container, video) => {
+        if (document.contains(video)) {
+          updateControllerPosition(video, container);
+        }
+      });
+      positionRAF = requestAnimationFrame(update);
+    }
+    positionRAF = requestAnimationFrame(update);
   }
 
   const globalHoverState = {
@@ -499,7 +499,7 @@
 
   function setupDraggable(container, video) {
     container.addEventListener('mousedown', (e) => {
-      if (e.target.closest('.vsp-button') || 
+      if (e.target.closest('.vsp-button') ||
           e.target.closest('.vsp-toggle-button') ||
           e.target.closest('.vsp-settings-button') ||
           e.target.closest('.vsp-current-speed')) {
@@ -511,9 +511,8 @@
       dragState.currentVideo = video;
       dragState.startX = e.clientX;
       dragState.startY = e.clientY;
-      
-      dragState.initialLeft = container.offsetLeft;
-      dragState.initialTop = container.offsetTop;
+      dragState.initialLeft = savedOffset.x;
+      dragState.initialTop = savedOffset.y;
 
       container.classList.add('vsp-dragging');
       e.preventDefault();
@@ -526,46 +525,33 @@
     const deltaX = e.clientX - dragState.startX;
     const deltaY = e.clientY - dragState.startY;
 
-    let newLeft = dragState.initialLeft + deltaX;
-    let newTop = dragState.initialTop + deltaY;
+    let newOffsetX = dragState.initialLeft + deltaX;
+    let newOffsetY = dragState.initialTop + deltaY;
 
-    const container = dragState.currentContainer;
     const video = dragState.currentVideo;
-    const parent = container.offsetParent;
+    const container = dragState.currentContainer;
+    const videoRect = video.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
 
-    if (parent && video) {
-      const containerRect = container.getBoundingClientRect();
-      const videoRect = video.getBoundingClientRect();
-      const parentRect = parent.getBoundingClientRect();
-      
-      const videoLeftInParent = videoRect.left - parentRect.left - parent.clientLeft + parent.scrollLeft;
-      const videoTopInParent = videoRect.top - parentRect.top - parent.clientTop + parent.scrollTop;
-      
-      const MARGIN = 10;
-      const minLeft = videoLeftInParent + MARGIN;
-      const minTop = videoTopInParent + MARGIN;
-      const maxLeft = videoLeftInParent + videoRect.width - containerRect.width - MARGIN;
-      const maxTop = videoTopInParent + videoRect.height - containerRect.height - MARGIN;
+    const MARGIN = 10;
+    const maxOffsetX = videoRect.width - containerRect.width - MARGIN;
+    const maxOffsetY = videoRect.height - containerRect.height - MARGIN;
 
-      newLeft = Math.max(minLeft, Math.min(newLeft, maxLeft));
-      newTop = Math.max(minTop, Math.min(newTop, maxTop));
-    }
+    newOffsetX = Math.max(MARGIN, Math.min(newOffsetX, maxOffsetX));
+    newOffsetY = Math.max(MARGIN, Math.min(newOffsetY, maxOffsetY));
 
-    dragState.currentContainer.style.left = `${newLeft}px`;
-    dragState.currentContainer.style.top = `${newTop}px`;
+    savedOffset.x = newOffsetX;
+    savedOffset.y = newOffsetY;
+
+    container.style.left = `${videoRect.left + newOffsetX}px`;
+    container.style.top = `${videoRect.top + newOffsetY}px`;
   }
 
   function handleMouseUp() {
     if (dragState.isDragging && dragState.currentContainer) {
       dragState.currentContainer.classList.remove('vsp-dragging');
 
-      const position = {
-        top: dragState.currentContainer.style.top,
-        left: dragState.currentContainer.style.left
-      };
-      
-      savedPosition = position;
-      chrome.storage.sync.set({ controllerPosition: position });
+      chrome.storage.sync.set({ controllerOffset: { x: savedOffset.x, y: savedOffset.y } });
 
       dragState.isDragging = false;
       dragState.currentContainer = null;
@@ -579,9 +565,43 @@
   function setVideoSpeed(video, speed, container) {
     video.playbackRate = speed;
     updateActiveButton(container, speed);
-    
+    showSpeedOSD(video, speed);
+
     preferredSpeed = speed;
     chrome.storage.sync.set({ preferredSpeed: speed });
+  }
+
+  let osdTimeout = null;
+  let osdElement = null;
+
+  function showSpeedOSD(video, speed) {
+    if (osdElement) {
+      osdElement.remove();
+      clearTimeout(osdTimeout);
+    }
+
+    osdElement = document.createElement('div');
+    osdElement.className = 'vsp-osd';
+    osdElement.textContent = `${speed}x`;
+
+    const appendTarget = document.fullscreenElement || document.body;
+    appendTarget.appendChild(osdElement);
+
+    const videoRect = video.getBoundingClientRect();
+    osdElement.style.left = `${videoRect.left + videoRect.width / 2}px`;
+    osdElement.style.top = `${videoRect.top + videoRect.height / 2}px`;
+
+    osdTimeout = setTimeout(() => {
+      if (osdElement) {
+        osdElement.classList.add('vsp-osd-fade');
+        setTimeout(() => {
+          if (osdElement) {
+            osdElement.remove();
+            osdElement = null;
+          }
+        }, 300);
+      }
+    }, 500);
   }
 
   function updateActiveButton(container, currentSpeed) {
@@ -598,7 +618,13 @@
 
   function removeController(video) {
     const controller = controllers.get(video);
-    if (controller && controller.parentElement) {
+    if (!controller) return;
+
+    if (controller._ratechangeHandler) {
+      video.removeEventListener('ratechange', controller._ratechangeHandler);
+    }
+
+    if (controller.parentElement) {
       controller.remove();
     }
     controllers.delete(video);
@@ -660,6 +686,111 @@
       setTimeout(startObserver, 100);
     }
   }
+
+  // Keyboard shortcuts
+  function handleKeyDown(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' ||
+        e.target.isContentEditable || e.target.closest('[contenteditable="true"]')) {
+      return;
+    }
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+
+    const key = e.key.toLowerCase();
+    if (key !== 's' && key !== 'd' && key !== 'r') return;
+
+    let targetVideo = null;
+    let targetContainer = null;
+    controllers.forEach((container, video) => {
+      if (!targetVideo && document.contains(video)) {
+        targetVideo = video;
+        targetContainer = container;
+      }
+    });
+    if (!targetVideo || !targetContainer) return;
+
+    e.preventDefault();
+
+    if (key === 'r') {
+      setVideoSpeed(targetVideo, 1.0, targetContainer);
+      return;
+    }
+
+    const currentSpeed = targetVideo.playbackRate;
+
+    if (e.shiftKey) {
+      const step = key === 'd' ? 0.25 : -0.25;
+      const newSpeed = Math.round((currentSpeed + step) * 100) / 100;
+      const clamped = Math.max(0.25, Math.min(4.0, newSpeed));
+      if (Math.abs(clamped - currentSpeed) > 0.01) {
+        setVideoSpeed(targetVideo, clamped, targetContainer);
+      }
+      return;
+    }
+
+    const sortedSpeeds = [...PRESETS].sort((a, b) => a - b);
+
+    if (key === 'd') {
+      const nextSpeed = sortedSpeeds.find(s => s > currentSpeed + 0.01);
+      if (nextSpeed) {
+        setVideoSpeed(targetVideo, nextSpeed, targetContainer);
+      }
+    } else if (key === 's') {
+      const prevSpeed = sortedSpeeds.slice().reverse().find(s => s < currentSpeed - 0.01);
+      if (prevSpeed) {
+        setVideoSpeed(targetVideo, prevSpeed, targetContainer);
+      }
+    }
+  }
+
+  document.addEventListener('keydown', handleKeyDown);
+
+  // Fullscreen support
+  document.addEventListener('fullscreenchange', () => {
+    if (document.fullscreenElement) {
+      controllers.forEach((container, video) => {
+        if (document.fullscreenElement.contains(video) || document.fullscreenElement === video) {
+          document.fullscreenElement.appendChild(container);
+        }
+      });
+    } else {
+      controllers.forEach((container) => {
+        if (container.parentElement !== document.body) {
+          document.body.appendChild(container);
+        }
+      });
+    }
+  });
+
+  // Message listener for popup communication
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'setSpeed') {
+      controllers.forEach((container, video) => {
+        if (document.contains(video)) {
+          setVideoSpeed(video, message.speed, container);
+        }
+      });
+      sendResponse({ success: true });
+    } else if (message.action === 'getSpeed') {
+      let speed = preferredSpeed;
+      controllers.forEach((container, video) => {
+        if (document.contains(video)) {
+          speed = video.playbackRate;
+        }
+      });
+      sendResponse({ speed: speed });
+    } else if (message.action === 'setMinimized') {
+      isMinimized = message.isMinimized;
+      controllers.forEach((ctrl) => {
+        if (isMinimized) {
+          ctrl.classList.add('vsp-minimized');
+        } else {
+          ctrl.classList.remove('vsp-minimized');
+        }
+      });
+      sendResponse({ success: true });
+    }
+    return true;
+  });
 
   startObserver();
   scanForVideos();
