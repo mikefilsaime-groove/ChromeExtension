@@ -21,6 +21,7 @@
   pointer-events: auto;
   cursor: move;
   position: relative;
+  touch-action: none;
 }
 
 .vsp-grab-handle {
@@ -106,6 +107,17 @@
 
 .vsp-button:active {
   transform: translateY(0);
+}
+
+.vsp-button:focus-visible,
+.vsp-toggle-button:focus-visible,
+.vsp-settings-button:focus-visible,
+.vsp-current-speed:focus-visible,
+.vsp-dial-option:focus-visible,
+.vsp-settings-save:focus-visible,
+.vsp-settings-cancel:focus-visible {
+  outline: 2px solid rgb(140, 185, 255);
+  outline-offset: 2px;
 }
 
 .vsp-current-speed {

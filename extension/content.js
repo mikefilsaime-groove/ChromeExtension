@@ -12,6 +12,9 @@
   let customSpeeds = null;
   let storageLoaded = false;
   let pendingVideos = [];
+  let activeVideo = null;
+  let scanScheduled = false;
+  const videosAwaitingMetadata = new WeakSet();
 
   let dragState = {
     isDragging: false,
@@ -112,6 +115,7 @@
     settingsButton.className = 'vsp-settings-button';
     settingsButton.innerHTML = '⚙️';
     settingsButton.setAttribute('title', 'Customize Speed Presets');
+    settingsButton.setAttribute('aria-label', 'Customize speed presets');
     settingsButton.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -150,13 +154,13 @@
     updateControllerPosition(video, container);
 
     setupDraggable(container, video);
-    setupVideoHover(video, container);
+    container._cleanupHover = setupVideoHover(video, container);
+    container._resizeObserver = new ResizeObserver(() => schedulePositionUpdate());
+    container._resizeObserver.observe(video);
 
     controllers.set(video, container);
 
-    if (!positionRAF) {
-      startPositionLoop();
-    }
+    schedulePositionUpdate();
 
     const ratechangeHandler = () => {
       updateActiveButton(container, video.playbackRate);
@@ -189,15 +193,21 @@
   function openSettingsModal() {
     if (document.querySelector('.vsp-settings-modal')) return;
 
+    const previouslyFocusedElement = document.activeElement;
+
     const overlay = document.createElement('div');
     overlay.className = 'vsp-settings-overlay';
 
     const modal = document.createElement('div');
     modal.className = 'vsp-settings-modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'vsp-settings-title');
 
     const title = document.createElement('h3');
     title.textContent = 'Customize Speed Presets';
     title.className = 'vsp-settings-title';
+    title.id = 'vsp-settings-title';
     modal.appendChild(title);
 
     const subtitle = document.createElement('p');
@@ -263,7 +273,7 @@
       chrome.storage.sync.set({ customSpeeds: newSpeeds });
 
       const controllersToRecreate = Array.from(controllers.entries());
-      overlay.remove();
+      closeSettingsModal();
       
       controllersToRecreate.forEach(([video, container]) => {
         recreateController(video, container);
@@ -275,7 +285,7 @@
     cancelButton.className = 'vsp-settings-cancel';
     cancelButton.addEventListener('click', (e) => {
       e.stopPropagation();
-      overlay.remove();
+      closeSettingsModal();
     });
 
     buttonContainer.appendChild(saveButton);
@@ -285,9 +295,27 @@
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
+    const closeSettingsModal = () => {
+      document.removeEventListener('keydown', handleModalKeyDown);
+      overlay.remove();
+      if (previouslyFocusedElement && document.contains(previouslyFocusedElement)) {
+        previouslyFocusedElement.focus();
+      }
+    };
+
+    const handleModalKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeSettingsModal();
+      }
+    };
+
+    document.addEventListener('keydown', handleModalKeyDown);
+    saveButton.focus();
+
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) {
-        overlay.remove();
+        closeSettingsModal();
       }
     });
   }
@@ -388,117 +416,85 @@
     }
   }
 
-  function startPositionLoop() {
-    function update() {
+  function schedulePositionUpdate() {
+    if (positionRAF) return;
+
+    positionRAF = requestAnimationFrame(() => {
+      positionRAF = null;
       controllers.forEach((container, video) => {
         if (document.contains(video)) {
           updateControllerPosition(video, container);
         }
       });
-      positionRAF = requestAnimationFrame(update);
-    }
-    positionRAF = requestAnimationFrame(update);
+    });
   }
 
-  const globalHoverState = {
-    mouseMoveListener: null,
-    lastMouseX: 0,
-    lastMouseY: 0,
-    lastMoveTime: Date.now(),
-    refCount: 0
-  };
+  window.addEventListener('resize', schedulePositionUpdate, { passive: true });
+  window.addEventListener('scroll', schedulePositionUpdate, { passive: true, capture: true });
 
   function setupVideoHover(video, container) {
-    let checkInterval = null;
-    let outsideCount = 0;
-    let wasHiddenByIdle = false;
-    const OUTSIDE_THRESHOLD = 3;
+    let hideTimeout = null;
+    const LEAVE_DELAY = 180;
+    const IDLE_DELAY = 2500;
 
-    if (globalHoverState.refCount === 0) {
-      globalHoverState.mouseMoveListener = (e) => {
-        globalHoverState.lastMouseX = e.clientX;
-        globalHoverState.lastMouseY = e.clientY;
-        globalHoverState.lastMoveTime = Date.now();
-      };
-      document.addEventListener('mousemove', globalHoverState.mouseMoveListener, { passive: true });
-    }
-    globalHoverState.refCount++;
-
-    const isInHoverZone = (x, y) => {
-      const videoRect = video.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-      
-      const minX = Math.min(videoRect.left, containerRect.left);
-      const minY = Math.min(videoRect.top, containerRect.top);
-      const maxX = Math.max(videoRect.right, containerRect.right);
-      const maxY = Math.max(videoRect.bottom, containerRect.bottom);
-      
-      return x >= minX && x <= maxX && y >= minY && y <= maxY;
+    const markActive = (e) => {
+      activeVideo = video;
     };
 
-    const startChecking = () => {
-      if (checkInterval) return;
-      
+    const clearHideTimeout = () => {
+      if (hideTimeout) {
+        clearTimeout(hideTimeout);
+        hideTimeout = null;
+      }
+    };
+
+    const hideController = () => {
+      hideTimeout = null;
+      if (!dragState.isDragging || dragState.currentContainer !== container) {
+        container.classList.remove('vsp-visible');
+      }
+    };
+
+    const showController = (e) => {
+      markActive(e);
+      clearHideTimeout();
       container.classList.add('vsp-visible');
-      wasHiddenByIdle = false;
-      outsideCount = 0;
-      
-      checkInterval = setInterval(() => {
-        if (dragState.isDragging) {
-          outsideCount = 0;
-          return;
-        }
-        
-        const inZone = isInHoverZone(globalHoverState.lastMouseX, globalHoverState.lastMouseY);
-        const idleTime = Date.now() - globalHoverState.lastMoveTime;
-        const isIdle = idleTime > 2500;
-
-        if (!inZone) {
-          outsideCount++;
-          if (outsideCount >= OUTSIDE_THRESHOLD) {
-            stopChecking(false);
-          }
-        } else if (isIdle) {
-          stopChecking(true);
-        } else {
-          outsideCount = 0;
-          if (wasHiddenByIdle && container.classList.contains('vsp-visible') === false) {
-            startChecking();
-          }
-        }
-      }, 50);
+      hideTimeout = setTimeout(hideController, IDLE_DELAY);
     };
 
-    const stopChecking = (hiddenByIdle) => {
-      if (checkInterval) {
-        clearInterval(checkInterval);
-        checkInterval = null;
-      }
-      outsideCount = 0;
-      wasHiddenByIdle = hiddenByIdle;
-      container.classList.remove('vsp-visible');
-      
-      if (hiddenByIdle) {
-        setTimeout(() => {
-          const inZone = isInHoverZone(globalHoverState.lastMouseX, globalHoverState.lastMouseY);
-          const idleTime = Date.now() - globalHoverState.lastMoveTime;
-          const isStillIdle = idleTime > 2500;
-          
-          if (inZone && !isStillIdle) {
-            startChecking();
-          } else if (inZone) {
-            stopChecking(true);
-          }
-        }, 100);
-      }
+    const hideAfterPointerLeaves = () => {
+      clearHideTimeout();
+      hideTimeout = setTimeout(() => {
+        hideTimeout = null;
+        if (!video.matches(':hover') && !container.matches(':hover')) {
+          hideController();
+        }
+      }, LEAVE_DELAY);
     };
 
-    video.addEventListener('mouseenter', startChecking);
-    container.addEventListener('mouseenter', startChecking);
+    video.addEventListener('pointerenter', showController, { passive: true });
+    video.addEventListener('pointermove', showController, { passive: true });
+    video.addEventListener('pointerdown', showController, { passive: true });
+    video.addEventListener('pointerleave', hideAfterPointerLeaves, { passive: true });
+    container.addEventListener('pointerenter', showController, { passive: true });
+    container.addEventListener('pointermove', showController, { passive: true });
+    container.addEventListener('pointerleave', hideAfterPointerLeaves, { passive: true });
+
+    return () => {
+      clearHideTimeout();
+      video.removeEventListener('pointerenter', showController);
+      video.removeEventListener('pointermove', showController);
+      video.removeEventListener('pointerdown', showController);
+      video.removeEventListener('pointerleave', hideAfterPointerLeaves);
+      container.removeEventListener('pointerenter', showController);
+      container.removeEventListener('pointermove', showController);
+      container.removeEventListener('pointerleave', hideAfterPointerLeaves);
+    };
   }
 
   function setupDraggable(container, video) {
-    container.addEventListener('mousedown', (e) => {
+    container.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
       if (e.target.closest('.vsp-button') ||
           e.target.closest('.vsp-toggle-button') ||
           e.target.closest('.vsp-settings-button') ||
@@ -514,12 +510,14 @@
       dragState.initialLeft = savedOffset.x;
       dragState.initialTop = savedOffset.y;
 
+      activeVideo = video;
       container.classList.add('vsp-dragging');
+      container.setPointerCapture?.(e.pointerId);
       e.preventDefault();
     });
   }
 
-  function handleMouseMove(e) {
+  function handlePointerMove(e) {
     if (!dragState.isDragging || !dragState.currentContainer || !dragState.currentVideo) return;
 
     const deltaX = e.clientX - dragState.startX;
@@ -547,22 +545,29 @@
     container.style.top = `${videoRect.top + newOffsetY}px`;
   }
 
-  function handleMouseUp() {
+  function handlePointerUp() {
     if (dragState.isDragging && dragState.currentContainer) {
-      dragState.currentContainer.classList.remove('vsp-dragging');
+      const container = dragState.currentContainer;
+      container.classList.remove('vsp-dragging');
 
       chrome.storage.sync.set({ controllerOffset: { x: savedOffset.x, y: savedOffset.y } });
 
       dragState.isDragging = false;
       dragState.currentContainer = null;
       dragState.currentVideo = null;
+
+      if (!container.matches(':hover')) {
+        container.classList.remove('vsp-visible');
+      }
     }
   }
 
-  document.addEventListener('mousemove', handleMouseMove);
-  document.addEventListener('mouseup', handleMouseUp);
+  document.addEventListener('pointermove', handlePointerMove);
+  document.addEventListener('pointerup', handlePointerUp);
+  document.addEventListener('pointercancel', handlePointerUp);
 
   function setVideoSpeed(video, speed, container) {
+    activeVideo = video;
     video.playbackRate = speed;
     updateActiveButton(container, speed);
     showSpeedOSD(video, speed);
@@ -623,18 +628,19 @@
     if (controller._ratechangeHandler) {
       video.removeEventListener('ratechange', controller._ratechangeHandler);
     }
+    if (controller._cleanupHover) {
+      controller._cleanupHover();
+    }
+    if (controller._resizeObserver) {
+      controller._resizeObserver.disconnect();
+    }
 
     if (controller.parentElement) {
       controller.remove();
     }
     controllers.delete(video);
 
-    globalHoverState.refCount--;
-    if (globalHoverState.refCount <= 0 && globalHoverState.mouseMoveListener) {
-      document.removeEventListener('mousemove', globalHoverState.mouseMoveListener);
-      globalHoverState.mouseMoveListener = null;
-      globalHoverState.refCount = 0;
-    }
+    if (activeVideo === video) activeVideo = null;
   }
 
   function scanForVideos() {
@@ -643,8 +649,10 @@
     videos.forEach(video => {
       if (video.readyState >= 1 && !controllers.has(video)) {
         createController(video);
-      } else if (!controllers.has(video)) {
+      } else if (!controllers.has(video) && !videosAwaitingMetadata.has(video)) {
+        videosAwaitingMetadata.add(video);
         video.addEventListener('loadedmetadata', () => {
+          videosAwaitingMetadata.delete(video);
           createController(video);
         }, { once: true });
       }
@@ -658,12 +666,48 @@
   }
 
   const observer = new MutationObserver(() => {
-    try {
-      scanForVideos();
-    } catch (e) {
-      console.warn('VSP: Error scanning for videos:', e);
-    }
+    scheduleVideoScan();
   });
+
+  function scheduleVideoScan() {
+    if (scanScheduled) return;
+    scanScheduled = true;
+    requestAnimationFrame(() => {
+      scanScheduled = false;
+      try {
+        scanForVideos();
+      } catch (e) {
+        console.warn('VSP: Error scanning for videos:', e);
+      }
+    });
+  }
+
+  function getTargetController() {
+    if (activeVideo && controllers.has(activeVideo) && document.contains(activeVideo)) {
+      return { video: activeVideo, container: controllers.get(activeVideo) };
+    }
+
+    for (const [video, container] of controllers) {
+      if (document.contains(video) && container.classList.contains('vsp-visible')) {
+        return { video, container };
+      }
+    }
+
+    for (const [video, container] of controllers) {
+      if (document.contains(video)) return { video, container };
+    }
+    return null;
+  }
+
+  function cleanUp() {
+    try {
+      observer.disconnect();
+      if (positionRAF) cancelAnimationFrame(positionRAF);
+      controllers.forEach((container, video) => removeController(video));
+    } catch (e) {
+      // The document may already be unloading.
+    }
+  }
 
   function startObserver() {
     try {
@@ -698,15 +742,9 @@
     const key = e.key.toLowerCase();
     if (key !== 's' && key !== 'd' && key !== 'r') return;
 
-    let targetVideo = null;
-    let targetContainer = null;
-    controllers.forEach((container, video) => {
-      if (!targetVideo && document.contains(video)) {
-        targetVideo = video;
-        targetContainer = container;
-      }
-    });
-    if (!targetVideo || !targetContainer) return;
+    const target = getTargetController();
+    if (!target) return;
+    const { video: targetVideo, container: targetContainer } = target;
 
     e.preventDefault();
 
@@ -759,25 +797,21 @@
         }
       });
     }
+    schedulePositionUpdate();
   });
 
   // Message listener for popup communication
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'setSpeed') {
-      controllers.forEach((container, video) => {
-        if (document.contains(video)) {
-          setVideoSpeed(video, message.speed, container);
-        }
-      });
-      sendResponse({ success: true });
+      const target = getTargetController();
+      if (target) setVideoSpeed(target.video, message.speed, target.container);
+      sendResponse({ success: true, appliedToVideo: Boolean(target) });
     } else if (message.action === 'getSpeed') {
-      let speed = preferredSpeed;
-      controllers.forEach((container, video) => {
-        if (document.contains(video)) {
-          speed = video.playbackRate;
-        }
+      const target = getTargetController();
+      sendResponse({
+        speed: target ? target.video.playbackRate : preferredSpeed,
+        hasVideo: Boolean(target)
       });
-      sendResponse({ speed: speed });
     } else if (message.action === 'setMinimized') {
       isMinimized = message.isMinimized;
       controllers.forEach((ctrl) => {
@@ -794,6 +828,7 @@
 
   startObserver();
   scanForVideos();
+  window.addEventListener('pagehide', cleanUp, { once: true });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {

@@ -7,7 +7,10 @@
 <body>
   <div class="vsp-popup">
     <div class="vsp-popup-header">
-      <div class="vsp-popup-title">Video Speed</div>
+      <div>
+        <div class="vsp-popup-title">Video Speed</div>
+        <div class="vsp-popup-version" id="extensionVersion"></div>
+      </div>
       <div class="vsp-popup-current" id="currentSpeed">1.0x</div>
     </div>
 
@@ -34,6 +37,7 @@
       <div class="vsp-popup-shortcut"><kbd>R</kbd> Reset 1x</div>
       <div class="vsp-popup-shortcut"><kbd>Shift+S/D</kbd> Fine tune</div>
     </div>
+    <div class="vsp-popup-status" id="popupStatus" role="status" aria-live="polite"></div>
   </div>
   <script src="popup.js"></script>
 </body>
