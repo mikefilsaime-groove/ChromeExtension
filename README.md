@@ -59,6 +59,8 @@ A simple Chrome extension for controlling HTML5 video playback speed with conven
 
 Open `test.html` in your browser to test the extension with a sample video.
 
+Automated checks for the on-video controller are in `tests/`. Serve the repository root (`python3 -m http.server 8765`), open `http://localhost:8765/tests/harness.html`, and run `await runVspTests()` in the browser console.
+
 ## File Structure
 
 ```
@@ -66,10 +68,11 @@ video-speed-presets/
 ├── extension/
 │   ├── manifest.json      # Extension configuration
 │   ├── content.js         # Main logic and video detection
-│   ├── styles.css         # Controller styling
+│   ├── controller-css.js  # Controller styling (added to each shadow root)
 │   ├── icon16.png         # Extension icon (16x16)
 │   ├── icon48.png         # Extension icon (48x48)
 │   └── icon128.png        # Extension icon (128x128)
+├── tests/                 # Browser checks for the controller
 ├── test.html              # Test page with sample video
 ├── README.md              # This file
 └── replit.md              # Project documentation

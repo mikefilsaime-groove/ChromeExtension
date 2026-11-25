@@ -14,6 +14,7 @@
   let pendingVideos = [];
   let activeVideo = null;
   let scanScheduled = false;
+  let settingsOpen = false;
   const videosAwaitingMetadata = new WeakSet();
 
   let dragState = {
@@ -50,6 +51,18 @@
     pendingVideos = [];
   });
 
+  // Every piece of UI lives in its own shadow root. Page styles cannot reach
+  // into a shadow root, so the UI looks the same on every site.
+  function createShadowMount(kind) {
+    const host = document.createElement('div');
+    host.setAttribute(`data-vsp-${kind}`, 'true');
+    const root = host.attachShadow({ mode: 'open' });
+    const style = document.createElement('style');
+    style.textContent = VSP_STYLES;
+    root.appendChild(style);
+    return { host, root };
+  }
+
   function createController(video) {
     if (controllers.has(video)) {
       return;
@@ -62,15 +75,20 @@
       return;
     }
 
+    const { host, root } = createShadowMount('controller');
+
     const container = document.createElement('div');
     container.className = 'vsp-controller';
-    container.setAttribute('data-vsp-controller', 'true');
+    container.setAttribute('role', 'group');
+    container.setAttribute('aria-label', 'Video speed');
+    container._host = host;
 
     const buttonsContainer = document.createElement('div');
     buttonsContainer.className = 'vsp-buttons';
 
     const leftHandle = document.createElement('div');
     leftHandle.className = 'vsp-grab-handle vsp-grab-handle-left';
+    leftHandle.setAttribute('aria-hidden', 'true');
     for (let i = 0; i < 3; i++) {
       const dot = document.createElement('div');
       dot.className = 'vsp-grab-dot';
@@ -80,6 +98,7 @@
 
     PRESETS.forEach(speed => {
       const button = document.createElement('button');
+      button.type = 'button';
       button.className = 'vsp-button';
       button.textContent = `${speed}x`;
       button.setAttribute('data-speed', speed);
@@ -101,9 +120,11 @@
       buttonsContainer.appendChild(button);
     });
 
-    const currentSpeedDisplay = document.createElement('div');
+    const currentSpeedDisplay = document.createElement('button');
+    currentSpeedDisplay.type = 'button';
     currentSpeedDisplay.className = 'vsp-current-speed';
     currentSpeedDisplay.textContent = `${video.playbackRate}x`;
+    currentSpeedDisplay.setAttribute('title', 'Choose speed');
     currentSpeedDisplay.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -112,6 +133,7 @@
     buttonsContainer.appendChild(currentSpeedDisplay);
 
     const settingsButton = document.createElement('button');
+    settingsButton.type = 'button';
     settingsButton.className = 'vsp-settings-button';
     settingsButton.innerHTML = '⚙️';
     settingsButton.setAttribute('title', 'Customize Speed Presets');
@@ -119,14 +141,16 @@
     settingsButton.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      openSettingsModal();
+      openSettingsModal(video);
     });
     buttonsContainer.appendChild(settingsButton);
 
     const toggleButton = document.createElement('button');
+    toggleButton.type = 'button';
     toggleButton.className = 'vsp-toggle-button';
     const toggleIcon = document.createElement('span');
     toggleIcon.className = 'vsp-toggle-icon';
+    toggleIcon.setAttribute('aria-hidden', 'true');
     toggleButton.appendChild(toggleIcon);
     toggleButton.addEventListener('click', (e) => {
       e.preventDefault();
@@ -137,6 +161,7 @@
 
     const rightHandle = document.createElement('div');
     rightHandle.className = 'vsp-grab-handle vsp-grab-handle-right';
+    rightHandle.setAttribute('aria-hidden', 'true');
     for (let i = 0; i < 3; i++) {
       const dot = document.createElement('div');
       dot.className = 'vsp-grab-dot';
@@ -144,13 +169,11 @@
     }
     buttonsContainer.appendChild(rightHandle);
 
-    if (isMinimized) {
-      container.classList.add('vsp-minimized');
-    }
-
     container.appendChild(buttonsContainer);
+    root.appendChild(container);
+    applyMinimizedState(container);
 
-    document.body.appendChild(container);
+    document.body.appendChild(host);
     updateControllerPosition(video, container);
 
     setupDraggable(container, video);
@@ -176,24 +199,27 @@
     }
   }
 
-  function toggleMinimize(container) {
-    isMinimized = !isMinimized;
-    
-    controllers.forEach((ctrl) => {
-      if (isMinimized) {
-        ctrl.classList.add('vsp-minimized');
-      } else {
-        ctrl.classList.remove('vsp-minimized');
-      }
-    });
+  function applyMinimizedState(container) {
+    container.classList.toggle('vsp-minimized', isMinimized);
+    const toggleButton = container.querySelector('.vsp-toggle-button');
+    if (toggleButton) {
+      const label = isMinimized ? 'Show all speed buttons' : 'Switch to compact mode';
+      toggleButton.setAttribute('aria-label', label);
+      toggleButton.setAttribute('title', label);
+    }
+  }
 
+  function toggleMinimize() {
+    isMinimized = !isMinimized;
+    controllers.forEach((container) => applyMinimizedState(container));
     chrome.storage.sync.set({ isMinimized: isMinimized });
   }
 
-  function openSettingsModal() {
-    if (document.querySelector('.vsp-settings-modal')) return;
+  function openSettingsModal(openerVideo) {
+    if (settingsOpen) return;
+    settingsOpen = true;
 
-    const previouslyFocusedElement = document.activeElement;
+    const { host, root } = createShadowMount('settings');
 
     const overlay = document.createElement('div');
     overlay.className = 'vsp-settings-overlay';
@@ -244,6 +270,7 @@
     buttonContainer.className = 'vsp-settings-buttons';
 
     const saveButton = document.createElement('button');
+    saveButton.type = 'button';
     saveButton.textContent = 'Save';
     saveButton.className = 'vsp-settings-save';
     saveButton.addEventListener('click', (e) => {
@@ -261,6 +288,7 @@
         if (!warning) {
           warning = document.createElement('div');
           warning.className = 'vsp-settings-warning';
+          warning.setAttribute('role', 'alert');
           warning.textContent = 'Please select at least one speed.';
           buttonContainer.insertAdjacentElement('beforebegin', warning);
         }
@@ -272,15 +300,16 @@
       PRESETS = [...newSpeeds];
       chrome.storage.sync.set({ customSpeeds: newSpeeds });
 
-      const controllersToRecreate = Array.from(controllers.entries());
-      closeSettingsModal();
-      
-      controllersToRecreate.forEach(([video, container]) => {
-        recreateController(video, container);
+      // Build each controller again with the new preset buttons.
+      Array.from(controllers.keys()).forEach(video => {
+        removeController(video);
+        createController(video);
       });
+      closeSettingsModal();
     });
 
     const cancelButton = document.createElement('button');
+    cancelButton.type = 'button';
     cancelButton.textContent = 'Cancel';
     cancelButton.className = 'vsp-settings-cancel';
     cancelButton.addEventListener('click', (e) => {
@@ -293,24 +322,66 @@
     modal.appendChild(buttonContainer);
 
     overlay.appendChild(modal);
-    document.body.appendChild(overlay);
+    root.appendChild(overlay);
+    document.body.appendChild(host);
 
     const closeSettingsModal = () => {
-      document.removeEventListener('keydown', handleModalKeyDown);
-      overlay.remove();
-      if (previouslyFocusedElement && document.contains(previouslyFocusedElement)) {
-        previouslyFocusedElement.focus();
+      if (!settingsOpen) return;
+      settingsOpen = false;
+      window.removeEventListener('keydown', handleModalKeyDown, true);
+      window.removeEventListener('keyup', keepKeyInDialog, true);
+      window.removeEventListener('keypress', keepKeyInDialog, true);
+      host.remove();
+
+      // Show the controller again and give focus back to its gear button.
+      // A hidden controller cannot take focus.
+      const container = controllers.get(openerVideo);
+      if (container && openerVideo.isConnected) {
+        container._showController();
+        const gear = container.querySelector('.vsp-settings-button');
+        if (gear) {
+          gear.focus({ preventScroll: true });
+        }
       }
     };
 
+    // Keys belong to the dialog while it is open: Escape closes it, Tab stays
+    // inside it, and no key reaches the shortcuts of the page or of this
+    // extension.
     const handleModalKeyDown = (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
         closeSettingsModal();
+        return;
+      }
+      if (e.key === 'Tab') {
+        const items = Array.from(modal.querySelectorAll('input, button'));
+        const first = items[0];
+        const last = items[items.length - 1];
+        const active = root.activeElement;
+        if (!modal.contains(active)) {
+          e.preventDefault();
+          first.focus();
+        } else if (e.shiftKey && active === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+      keepKeyInDialog(e);
+    };
+    const keepKeyInDialog = (e) => {
+      if (e.composedPath().includes(host)) {
+        e.stopPropagation();
       }
     };
 
-    document.addEventListener('keydown', handleModalKeyDown);
+    window.addEventListener('keydown', handleModalKeyDown, true);
+    window.addEventListener('keyup', keepKeyInDialog, true);
+    window.addEventListener('keypress', keepKeyInDialog, true);
     saveButton.focus();
 
     overlay.addEventListener('click', (e) => {
@@ -318,24 +389,6 @@
         closeSettingsModal();
       }
     });
-  }
-
-  function recreateController(video, oldContainer) {
-    const wasVisible = oldContainer.classList.contains('vsp-visible');
-    const wasMinimized = oldContainer.classList.contains('vsp-minimized');
-
-    removeController(video);
-    createController(video);
-
-    const newContainer = controllers.get(video);
-    if (newContainer) {
-      if (wasVisible) {
-        newContainer.classList.add('vsp-visible');
-      }
-      if (wasMinimized) {
-        newContainer.classList.add('vsp-minimized');
-      }
-    }
   }
 
   function updateCurrentSpeedDisplay(container, speed) {
@@ -379,6 +432,7 @@
 
   function createDialOption(speed, isCurrent, video, container) {
     const option = document.createElement('button');
+    option.type = 'button';
     option.className = 'vsp-dial-option';
     option.textContent = `${speed}x`;
     
@@ -406,6 +460,7 @@
   function updateControllerPosition(video, container) {
     if (dragState.isDragging && dragState.currentContainer === container) return;
     const videoRect = video.getBoundingClientRect();
+    container._videoHasSize = videoRect.width >= 1 && videoRect.height >= 1;
     const newLeft = videoRect.left + savedOffset.x;
     const newTop = videoRect.top + savedOffset.y;
     if (container._lastLeft !== newLeft || container._lastTop !== newTop) {
@@ -479,6 +534,7 @@
     container.addEventListener('pointerenter', showController, { passive: true });
     container.addEventListener('pointermove', showController, { passive: true });
     container.addEventListener('pointerleave', hideAfterPointerLeaves, { passive: true });
+    container._showController = showController;
 
     return () => {
       clearHideTimeout();
@@ -491,6 +547,27 @@
       container.removeEventListener('pointerleave', hideAfterPointerLeaves);
     };
   }
+
+  // A hidden controller gets no pointer events, so it cannot take clicks
+  // from the page. Some players put a layer on top of the video, and then
+  // the video gets no pointer events either. For those players, the pointer
+  // on the place of a hidden controller shows it. This uses the position
+  // that updateControllerPosition saved, and a video with no size (for
+  // example display: none) has no place for a controller.
+  function revealControllerUnderPointer(e) {
+    if (settingsOpen || dragState.isDragging) return;
+    controllers.forEach((container) => {
+      if (!container._videoHasSize || container.classList.contains('vsp-visible')) return;
+      const left = container._lastLeft;
+      const top = container._lastTop;
+      if (e.clientX < left || e.clientY < top) return;
+      if (e.clientX <= left + container.offsetWidth && e.clientY <= top + container.offsetHeight) {
+        container._showController();
+      }
+    });
+  }
+
+  window.addEventListener('pointermove', revealControllerUnderPointer, { capture: true, passive: true });
 
   function setupDraggable(container, video) {
     container.addEventListener('pointerdown', (e) => {
@@ -512,7 +589,11 @@
 
       activeVideo = video;
       container.classList.add('vsp-dragging');
-      container.setPointerCapture?.(e.pointerId);
+      try {
+        container.setPointerCapture?.(e.pointerId);
+      } catch (err) {
+        // The pointer is no longer active. The drag still works without capture.
+      }
       e.preventDefault();
     });
   }
@@ -577,35 +658,37 @@
   }
 
   let osdTimeout = null;
-  let osdElement = null;
+  let osdHost = null;
+
+  function removeSpeedOSD() {
+    clearTimeout(osdTimeout);
+    osdTimeout = null;
+    if (osdHost) {
+      osdHost.remove();
+      osdHost = null;
+    }
+  }
 
   function showSpeedOSD(video, speed) {
-    if (osdElement) {
-      osdElement.remove();
-      clearTimeout(osdTimeout);
-    }
+    removeSpeedOSD();
 
-    osdElement = document.createElement('div');
+    const { host, root } = createShadowMount('osd');
+    const osdElement = document.createElement('div');
     osdElement.className = 'vsp-osd';
     osdElement.textContent = `${speed}x`;
+    root.appendChild(osdElement);
+    osdHost = host;
 
     const appendTarget = document.fullscreenElement || document.body;
-    appendTarget.appendChild(osdElement);
+    appendTarget.appendChild(host);
 
     const videoRect = video.getBoundingClientRect();
     osdElement.style.left = `${videoRect.left + videoRect.width / 2}px`;
     osdElement.style.top = `${videoRect.top + videoRect.height / 2}px`;
 
     osdTimeout = setTimeout(() => {
-      if (osdElement) {
-        osdElement.classList.add('vsp-osd-fade');
-        setTimeout(() => {
-          if (osdElement) {
-            osdElement.remove();
-            osdElement = null;
-          }
-        }, 300);
-      }
+      osdElement.classList.add('vsp-osd-fade');
+      osdTimeout = setTimeout(removeSpeedOSD, 300);
     }, 500);
   }
 
@@ -635,9 +718,7 @@
       controller._resizeObserver.disconnect();
     }
 
-    if (controller.parentElement) {
-      controller.remove();
-    }
+    controller._host.remove();
     controllers.delete(video);
 
     if (activeVideo === video) activeVideo = null;
@@ -787,13 +868,13 @@
     if (document.fullscreenElement) {
       controllers.forEach((container, video) => {
         if (document.fullscreenElement.contains(video) || document.fullscreenElement === video) {
-          document.fullscreenElement.appendChild(container);
+          document.fullscreenElement.appendChild(container._host);
         }
       });
     } else {
       controllers.forEach((container) => {
-        if (container.parentElement !== document.body) {
-          document.body.appendChild(container);
+        if (container._host.parentElement !== document.body) {
+          document.body.appendChild(container._host);
         }
       });
     }
@@ -814,13 +895,7 @@
       });
     } else if (message.action === 'setMinimized') {
       isMinimized = message.isMinimized;
-      controllers.forEach((ctrl) => {
-        if (isMinimized) {
-          ctrl.classList.add('vsp-minimized');
-        } else {
-          ctrl.classList.remove('vsp-minimized');
-        }
-      });
+      controllers.forEach((container) => applyMinimizedState(container));
       sendResponse({ success: true });
     }
     return true;
