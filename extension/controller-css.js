@@ -22,7 +22,7 @@ input {
 
 button:focus-visible,
 input:focus-visible {
-  outline: 2px solid rgba(150, 190, 255, 1);
+  outline: 2px solid rgb(140, 185, 255);
   outline-offset: 2px;
 }
 
@@ -60,6 +60,7 @@ input:focus-visible {
   pointer-events: auto;
   cursor: move;
   position: relative;
+  touch-action: none;
 }
 
 .vsp-grab-handle {

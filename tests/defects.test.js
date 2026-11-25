@@ -43,16 +43,50 @@
     return Array.from(el.attributes || []).some((a) => a.name.startsWith('data-vsp'));
   }
 
-  function mouse(type, x, y, target) {
-    const t = target || document.elementFromPoint(x, y) || document.body;
-    t.dispatchEvent(new MouseEvent(type, {
-      clientX: x, clientY: y, view: window,
-      bubbles: type !== 'mouseenter', composed: true, cancelable: true
-    }));
+  // A virtual pointer. It sends what a real mouse sends: pointer events and
+  // mouse events, with enter and leave events for each element that the
+  // pointer comes onto or goes off.
+  let pointerPath = [];
+  function deepElementFromPoint(x, y) {
+    let el = document.elementFromPoint(x, y);
+    while (el && el.shadowRoot) {
+      const inner = el.shadowRoot.elementFromPoint(x, y);
+      if (!inner || inner === el) break;
+      el = inner;
+    }
+    return el || document.body;
+  }
+  function withAncestors(el) {
+    const out = [];
+    for (let n = el; n; n = n.parentElement || (n.parentNode && n.parentNode.host) || null) {
+      out.push(n);
+    }
+    return out;
+  }
+  function fire(type, x, y, target) {
+    const init = {
+      clientX: x, clientY: y, view: window, button: 0,
+      bubbles: !/enter|leave/.test(type), composed: true, cancelable: true
+    };
+    if (type.startsWith('pointer')) {
+      Object.assign(init, { pointerId: 1, pointerType: 'mouse', isPrimary: true });
+      target.dispatchEvent(new PointerEvent(type, init));
+    } else {
+      target.dispatchEvent(new MouseEvent(type, init));
+    }
+  }
+  // kind: 'move', 'down', 'up', 'enter' or 'leave'
+  function send(kind, x, y, target) {
+    fire('pointer' + kind, x, y, target);
+    fire('mouse' + kind, x, y, target);
   }
   function moveTo(x, y) {
-    mouse('mouseenter', x, y);
-    mouse('mousemove', x, y);
+    const target = deepElementFromPoint(x, y);
+    const next = withAncestors(target);
+    pointerPath.filter((el) => !next.includes(el)).forEach((el) => send('leave', x, y, el));
+    next.filter((el) => !pointerPath.includes(el)).reverse().forEach((el) => send('enter', x, y, el));
+    pointerPath = next;
+    send('move', x, y, target);
   }
   // Poll until fn() is true. The page can run slowly when the browser pane
   // is in the background, so the checks wait for a result and do not use
@@ -201,9 +235,9 @@
     const bar = controller().querySelector('.vsp-buttons');
     const r = bar.getBoundingClientRect();
     const start = { x: r.left + 3, y: r.top + 3 };
-    mouse('mousedown', start.x, start.y, bar);
-    mouse('mousemove', start.x + 100, start.y + 50, document.body);
-    mouse('mouseup', start.x + 100, start.y + 50, document.body);
+    send('down', start.x, start.y, bar);
+    send('move', start.x + 100, start.y + 50, document.body);
+    send('up', start.x + 100, start.y + 50, document.body);
     await sleep(100);
     const saved = window.__vspStore.controllerOffset;
     assert(saved && saved.x === 110 && saved.y === 60, 'saved offset is ' + JSON.stringify(saved));
@@ -212,10 +246,32 @@
     assert(Math.abs(c.left - (v.left + 110)) < 1, 'controller left is ' + c.left);
     // Put it back.
     const r2 = bar.getBoundingClientRect();
-    mouse('mousedown', r2.left + 3, r2.top + 3, bar);
-    mouse('mousemove', r2.left + 3 - 100, r2.top + 3 - 50, document.body);
-    mouse('mouseup', r2.left + 3 - 100, r2.top + 3 - 50, document.body);
+    send('down', r2.left + 3, r2.top + 3, bar);
+    send('move', r2.left + 3 - 100, r2.top + 3 - 50, document.body);
+    send('up', r2.left + 3 - 100, r2.top + 3 - 50, document.body);
     await sleep(100);
+  });
+
+  test('controller shows on a player that covers the video with a layer', async () => {
+    // The video gets no pointer events here. The pointer on the place of the
+    // controller must still show it.
+    const v = video().getBoundingClientRect();
+    const layer = document.createElement('div');
+    layer.style.cssText = 'position:fixed;z-index:10;left:' + v.left + 'px;top:' + v.top +
+      'px;width:' + v.width + 'px;height:' + v.height + 'px;';
+    document.body.appendChild(layer);
+    try {
+      moveTo(v.left + 300, v.top + 250);
+      await sleep(200);
+      assert(!isShown(controller()), 'controller showed away from its place');
+      moveTo(v.left + 40, v.top + 25);
+      await sleep(40);
+      moveTo(v.left + 42, v.top + 27);
+      const shown = await waitFor(() => isShown(controller()), 1500);
+      assert(shown, 'controller did not show');
+    } finally {
+      layer.remove();
+    }
   });
 
   // ---- Defect 1: the hidden controller must not receive clicks ----

@@ -3,11 +3,7 @@
 
   const ALL_SPEEDS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 3.5, 4.0];
   const DEFAULT_PRESETS = [1.0, 1.5, 2.0, 3.0, 4.0];
-  const IDLE_HIDE_MS = 2500;
-  const LEAVE_HIDE_MS = 150;
-
   let PRESETS = [...DEFAULT_PRESETS];
-  // video element -> controller element (the .vsp-controller in a shadow root)
   const controllers = new Map();
   let savedOffset = { x: 10, y: 10 };
   let positionRAF = null;
@@ -16,7 +12,10 @@
   let customSpeeds = null;
   let storageLoaded = false;
   let pendingVideos = [];
+  let activeVideo = null;
+  let scanScheduled = false;
   let settingsOpen = false;
+  const videosAwaitingMetadata = new WeakSet();
 
   let dragState = {
     isDragging: false,
@@ -64,18 +63,6 @@
     return { host, root };
   }
 
-  function createGrabHandle(side) {
-    const handle = document.createElement('div');
-    handle.className = `vsp-grab-handle vsp-grab-handle-${side}`;
-    handle.setAttribute('aria-hidden', 'true');
-    for (let i = 0; i < 3; i++) {
-      const dot = document.createElement('div');
-      dot.className = 'vsp-grab-dot';
-      handle.appendChild(dot);
-    }
-    return handle;
-  }
-
   function createController(video) {
     if (controllers.has(video)) {
       return;
@@ -95,18 +82,19 @@
     container.setAttribute('role', 'group');
     container.setAttribute('aria-label', 'Video speed');
     container._host = host;
-    container._state = {
-      engaged: false,   // the pointer came onto this video and has not left it
-      visible: false,
-      lastActive: 0,
-      idleTimer: null,
-      leaveTimer: null
-    };
 
     const buttonsContainer = document.createElement('div');
     buttonsContainer.className = 'vsp-buttons';
 
-    buttonsContainer.appendChild(createGrabHandle('left'));
+    const leftHandle = document.createElement('div');
+    leftHandle.className = 'vsp-grab-handle vsp-grab-handle-left';
+    leftHandle.setAttribute('aria-hidden', 'true');
+    for (let i = 0; i < 3; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'vsp-grab-dot';
+      leftHandle.appendChild(dot);
+    }
+    buttonsContainer.appendChild(leftHandle);
 
     PRESETS.forEach(speed => {
       const button = document.createElement('button');
@@ -114,9 +102,13 @@
       button.className = 'vsp-button';
       button.textContent = `${speed}x`;
       button.setAttribute('data-speed', speed);
-
+      
       if (speed === 1.0 || speed === 2.0) {
         button.classList.add('vsp-prominent');
+      }
+
+      if (Math.abs(video.playbackRate - speed) < 0.01) {
+        button.classList.add('vsp-active');
       }
 
       button.addEventListener('click', (e) => {
@@ -133,8 +125,6 @@
     currentSpeedDisplay.className = 'vsp-current-speed';
     currentSpeedDisplay.textContent = `${video.playbackRate}x`;
     currentSpeedDisplay.setAttribute('title', 'Choose speed');
-    currentSpeedDisplay.setAttribute('aria-haspopup', 'true');
-    currentSpeedDisplay.setAttribute('aria-expanded', 'false');
     currentSpeedDisplay.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -145,7 +135,7 @@
     const settingsButton = document.createElement('button');
     settingsButton.type = 'button';
     settingsButton.className = 'vsp-settings-button';
-    settingsButton.textContent = '⚙️';
+    settingsButton.innerHTML = '⚙️';
     settingsButton.setAttribute('title', 'Customize Speed Presets');
     settingsButton.setAttribute('aria-label', 'Customize speed presets');
     settingsButton.addEventListener('click', (e) => {
@@ -169,19 +159,31 @@
     });
     buttonsContainer.appendChild(toggleButton);
 
-    buttonsContainer.appendChild(createGrabHandle('right'));
+    const rightHandle = document.createElement('div');
+    rightHandle.className = 'vsp-grab-handle vsp-grab-handle-right';
+    rightHandle.setAttribute('aria-hidden', 'true');
+    for (let i = 0; i < 3; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'vsp-grab-dot';
+      rightHandle.appendChild(dot);
+    }
+    buttonsContainer.appendChild(rightHandle);
 
     container.appendChild(buttonsContainer);
     root.appendChild(container);
     applyMinimizedState(container);
-    updateActiveButton(container, video.playbackRate);
 
     document.body.appendChild(host);
     updateControllerPosition(video, container);
 
     setupDraggable(container, video);
+    container._cleanupHover = setupVideoHover(video, container);
+    container._resizeObserver = new ResizeObserver(() => schedulePositionUpdate());
+    container._resizeObserver.observe(video);
 
     controllers.set(video, container);
+
+    schedulePositionUpdate();
 
     const ratechangeHandler = () => {
       updateActiveButton(container, video.playbackRate);
@@ -205,21 +207,17 @@
       toggleButton.setAttribute('aria-label', label);
       toggleButton.setAttribute('title', label);
     }
-    if (!isMinimized) {
-      closeSpeedDial(container);
-    }
   }
 
   function toggleMinimize() {
     isMinimized = !isMinimized;
-    controllers.forEach(applyMinimizedState);
+    controllers.forEach((container) => applyMinimizedState(container));
     chrome.storage.sync.set({ isMinimized: isMinimized });
   }
 
   function openSettingsModal(openerVideo) {
     if (settingsOpen) return;
     settingsOpen = true;
-    controllers.forEach(hideController);
 
     const { host, root } = createShadowMount('settings');
 
@@ -233,9 +231,9 @@
     modal.setAttribute('aria-labelledby', 'vsp-settings-title');
 
     const title = document.createElement('h3');
-    title.id = 'vsp-settings-title';
     title.textContent = 'Customize Speed Presets';
     title.className = 'vsp-settings-title';
+    title.id = 'vsp-settings-title';
     modal.appendChild(title);
 
     const subtitle = document.createElement('p');
@@ -270,62 +268,6 @@
 
     const buttonContainer = document.createElement('div');
     buttonContainer.className = 'vsp-settings-buttons';
-
-    const focusableElements = () => Array.from(modal.querySelectorAll('input, button'));
-
-    // Keys belong to the dialog while it is open: Escape closes it, Tab stays
-    // inside it, and no key reaches the shortcuts of the page or of this
-    // extension.
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        close();
-        return;
-      }
-      if (e.key === 'Tab') {
-        const items = focusableElements();
-        const first = items[0];
-        const last = items[items.length - 1];
-        const active = root.activeElement;
-        if (!modal.contains(active)) {
-          e.preventDefault();
-          first.focus();
-        } else if (e.shiftKey && active === first) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && active === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
-      keepKeyInDialog(e);
-    };
-    const keepKeyInDialog = (e) => {
-      if (e.composedPath().includes(host)) {
-        e.stopPropagation();
-      }
-    };
-
-    const close = () => {
-      if (!settingsOpen) return;
-      settingsOpen = false;
-      window.removeEventListener('keydown', onKeyDown, true);
-      window.removeEventListener('keyup', keepKeyInDialog, true);
-      window.removeEventListener('keypress', keepKeyInDialog, true);
-      host.remove();
-
-      // Show the controller again and give focus back to its gear button.
-      const container = controllers.get(openerVideo);
-      if (container && openerVideo.isConnected) {
-        container._state.engaged = true;
-        showController(openerVideo, container);
-        const gear = container.querySelector('.vsp-settings-button');
-        if (gear) {
-          gear.focus({ preventScroll: true });
-        }
-      }
-    };
 
     const saveButton = document.createElement('button');
     saveButton.type = 'button';
@@ -363,7 +305,7 @@
         removeController(video);
         createController(video);
       });
-      close();
+      closeSettingsModal();
     });
 
     const cancelButton = document.createElement('button');
@@ -372,7 +314,7 @@
     cancelButton.className = 'vsp-settings-cancel';
     cancelButton.addEventListener('click', (e) => {
       e.stopPropagation();
-      close();
+      closeSettingsModal();
     });
 
     buttonContainer.appendChild(saveButton);
@@ -383,17 +325,70 @@
     root.appendChild(overlay);
     document.body.appendChild(host);
 
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) {
-        close();
-      }
-    });
+    const closeSettingsModal = () => {
+      if (!settingsOpen) return;
+      settingsOpen = false;
+      window.removeEventListener('keydown', handleModalKeyDown, true);
+      window.removeEventListener('keyup', keepKeyInDialog, true);
+      window.removeEventListener('keypress', keepKeyInDialog, true);
+      host.remove();
 
-    window.addEventListener('keydown', onKeyDown, true);
+      // Show the controller again and give focus back to its gear button.
+      // A hidden controller cannot take focus.
+      const container = controllers.get(openerVideo);
+      if (container && openerVideo.isConnected) {
+        container._showController();
+        const gear = container.querySelector('.vsp-settings-button');
+        if (gear) {
+          gear.focus({ preventScroll: true });
+        }
+      }
+    };
+
+    // Keys belong to the dialog while it is open: Escape closes it, Tab stays
+    // inside it, and no key reaches the shortcuts of the page or of this
+    // extension.
+    const handleModalKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        closeSettingsModal();
+        return;
+      }
+      if (e.key === 'Tab') {
+        const items = Array.from(modal.querySelectorAll('input, button'));
+        const first = items[0];
+        const last = items[items.length - 1];
+        const active = root.activeElement;
+        if (!modal.contains(active)) {
+          e.preventDefault();
+          first.focus();
+        } else if (e.shiftKey && active === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+      keepKeyInDialog(e);
+    };
+    const keepKeyInDialog = (e) => {
+      if (e.composedPath().includes(host)) {
+        e.stopPropagation();
+      }
+    };
+
+    window.addEventListener('keydown', handleModalKeyDown, true);
     window.addEventListener('keyup', keepKeyInDialog, true);
     window.addEventListener('keypress', keepKeyInDialog, true);
+    saveButton.focus();
 
-    focusableElements()[0].focus({ preventScroll: true });
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        closeSettingsModal();
+      }
+    });
   }
 
   function updateCurrentSpeedDisplay(container, speed) {
@@ -403,33 +398,20 @@
     }
   }
 
-  function closeSpeedDial(container) {
-    const dial = container.querySelector('.vsp-speed-dial');
+  function toggleSpeedDial(container, video) {
+    let dial = container.querySelector('.vsp-speed-dial');
+    
     if (dial) {
       dial.remove();
-    }
-    if (container._dialOutsideHandler) {
-      document.removeEventListener('click', container._dialOutsideHandler);
-      container._dialOutsideHandler = null;
-    }
-    const display = container.querySelector('.vsp-current-speed');
-    if (display) {
-      display.setAttribute('aria-expanded', 'false');
-    }
-  }
-
-  function toggleSpeedDial(container, video) {
-    if (container.querySelector('.vsp-speed-dial')) {
-      closeSpeedDial(container);
       return;
     }
 
     const currentSpeed = video.playbackRate;
     const currentIndex = PRESETS.findIndex(speed => Math.abs(speed - currentSpeed) < 0.01);
-
+    
     if (currentIndex === -1) return;
 
-    const dial = document.createElement('div');
+    dial = document.createElement('div');
     dial.className = 'vsp-speed-dial';
 
     PRESETS.forEach(speed => {
@@ -440,18 +422,12 @@
 
     container.appendChild(dial);
 
-    const display = container.querySelector('.vsp-current-speed');
-    display.setAttribute('aria-expanded', 'true');
-
-    // A click outside the list closes it. Clicks inside a shadow root show
-    // the host as their target, so look at the full path of the event.
-    container._dialOutsideHandler = (e) => {
-      const path = e.composedPath();
-      if (!path.includes(dial) && !path.includes(display)) {
-        closeSpeedDial(container);
+    document.addEventListener('click', function closeDialOutside(e) {
+      if (!dial.contains(e.target) && !e.target.closest('.vsp-current-speed')) {
+        dial.remove();
+        document.removeEventListener('click', closeDialOutside);
       }
-    };
-    document.addEventListener('click', container._dialOutsideHandler);
+    });
   }
 
   function createDialOption(speed, isCurrent, video, container) {
@@ -459,21 +435,23 @@
     option.type = 'button';
     option.className = 'vsp-dial-option';
     option.textContent = `${speed}x`;
-
+    
     if (isCurrent) {
       option.classList.add('vsp-dial-current');
-      option.setAttribute('aria-current', 'true');
     }
 
     option.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-
+      
       if (!isCurrent) {
         setVideoSpeed(video, speed, container);
       }
-
-      closeSpeedDial(container);
+      
+      const dial = container.querySelector('.vsp-speed-dial');
+      if (dial) {
+        dial.remove();
+      }
     });
 
     return option;
@@ -482,6 +460,7 @@
   function updateControllerPosition(video, container) {
     if (dragState.isDragging && dragState.currentContainer === container) return;
     const videoRect = video.getBoundingClientRect();
+    container._videoHasSize = videoRect.width >= 1 && videoRect.height >= 1;
     const newLeft = videoRect.left + savedOffset.x;
     const newTop = videoRect.top + savedOffset.y;
     if (container._lastLeft !== newLeft || container._lastTop !== newTop) {
@@ -492,141 +471,111 @@
     }
   }
 
-  // Keeps visible controllers on their videos while the page scrolls or
-  // changes layout. The loop stops when no controller is visible.
-  function startPositionLoop() {
+  function schedulePositionUpdate() {
     if (positionRAF) return;
-    function update() {
-      let anyVisible = false;
+
+    positionRAF = requestAnimationFrame(() => {
+      positionRAF = null;
       controllers.forEach((container, video) => {
-        if (container._state.visible && video.isConnected) {
-          anyVisible = true;
+        if (document.contains(video)) {
           updateControllerPosition(video, container);
         }
       });
-      positionRAF = anyVisible ? requestAnimationFrame(update) : null;
-    }
-    positionRAF = requestAnimationFrame(update);
+    });
   }
 
-  // ---- Show and hide ----
-  //
-  // All of this runs from mousemove events. When the pointer does not move,
-  // the only thing left is one timer that hides the controller.
+  window.addEventListener('resize', schedulePositionUpdate, { passive: true });
+  window.addEventListener('scroll', schedulePositionUpdate, { passive: true, capture: true });
 
-  function onPointerMove(e) {
-    if (controllers.size === 0) return;
-    const x = e.clientX;
-    const y = e.clientY;
-    const path = e.composedPath();
+  function setupVideoHover(video, container) {
+    let hideTimeout = null;
+    const LEAVE_DELAY = 180;
+    const IDLE_DELAY = 2500;
 
-    controllers.forEach((container, video) => {
-      const state = container._state;
+    const markActive = (e) => {
+      activeVideo = video;
+    };
 
-      if (settingsOpen || !video.isConnected) {
-        state.engaged = false;
-        hideController(container);
-        return;
+    const clearHideTimeout = () => {
+      if (hideTimeout) {
+        clearTimeout(hideTimeout);
+        hideTimeout = null;
       }
+    };
 
-      if (dragState.isDragging && dragState.currentContainer === container) {
-        showController(video, container);
-        return;
+    const hideController = () => {
+      hideTimeout = null;
+      if (!dragState.isDragging || dragState.currentContainer !== container) {
+        container.classList.remove('vsp-visible');
       }
+    };
 
-      const videoRect = video.getBoundingClientRect();
+    const showController = (e) => {
+      markActive(e);
+      clearHideTimeout();
+      container.classList.add('vsp-visible');
+      hideTimeout = setTimeout(hideController, IDLE_DELAY);
+    };
 
-      // A video with no size (display: none, or not laid out) has no place
-      // for a controller.
-      if (videoRect.width < 1 || videoRect.height < 1) {
-        state.engaged = false;
-        hideController(container);
-        return;
-      }
+    const hideAfterPointerLeaves = () => {
+      clearHideTimeout();
+      hideTimeout = setTimeout(() => {
+        hideTimeout = null;
+        if (!video.matches(':hover') && !container.matches(':hover')) {
+          hideController();
+        }
+      }, LEAVE_DELAY);
+    };
 
-      const inVideo = x >= videoRect.left && x <= videoRect.right &&
-                      y >= videoRect.top && y <= videoRect.bottom;
+    video.addEventListener('pointerenter', showController, { passive: true });
+    video.addEventListener('pointermove', showController, { passive: true });
+    video.addEventListener('pointerdown', showController, { passive: true });
+    video.addEventListener('pointerleave', hideAfterPointerLeaves, { passive: true });
+    container.addEventListener('pointerenter', showController, { passive: true });
+    container.addEventListener('pointermove', showController, { passive: true });
+    container.addEventListener('pointerleave', hideAfterPointerLeaves, { passive: true });
+    container._showController = showController;
 
-      const left = videoRect.left + savedOffset.x;
-      const top = videoRect.top + savedOffset.y;
-      const inController = x >= left && x <= left + container.offsetWidth &&
-                           y >= top && y <= top + container.offsetHeight;
+    return () => {
+      clearHideTimeout();
+      video.removeEventListener('pointerenter', showController);
+      video.removeEventListener('pointermove', showController);
+      video.removeEventListener('pointerdown', showController);
+      video.removeEventListener('pointerleave', hideAfterPointerLeaves);
+      container.removeEventListener('pointerenter', showController);
+      container.removeEventListener('pointermove', showController);
+      container.removeEventListener('pointerleave', hideAfterPointerLeaves);
+    };
+  }
 
-      // The pointer comes onto the video when the video is the target of
-      // the event. Some players put a layer on top of the video, so the
-      // video is never the target: the pointer on the place of the
-      // controller also counts.
-      if (!state.engaged && (path.includes(video) || inController)) {
-        state.engaged = true;
-      }
-      if (!state.engaged) return;
-
-      if (inVideo || inController) {
-        showController(video, container);
-      } else if (!state.leaveTimer) {
-        state.leaveTimer = setTimeout(() => {
-          state.leaveTimer = null;
-          state.engaged = false;
-          hideController(container);
-        }, LEAVE_HIDE_MS);
+  // A hidden controller gets no pointer events, so it cannot take clicks
+  // from the page. Some players put a layer on top of the video, and then
+  // the video gets no pointer events either. For those players, the pointer
+  // on the place of a hidden controller shows it. This uses the position
+  // that updateControllerPosition saved, and a video with no size (for
+  // example display: none) has no place for a controller.
+  function revealControllerUnderPointer(e) {
+    if (settingsOpen || dragState.isDragging) return;
+    controllers.forEach((container) => {
+      if (!container._videoHasSize || container.classList.contains('vsp-visible')) return;
+      const left = container._lastLeft;
+      const top = container._lastTop;
+      if (e.clientX < left || e.clientY < top) return;
+      if (e.clientX <= left + container.offsetWidth && e.clientY <= top + container.offsetHeight) {
+        container._showController();
       }
     });
   }
 
-  function showController(video, container) {
-    const state = container._state;
-    state.lastActive = Date.now();
-
-    if (state.leaveTimer) {
-      clearTimeout(state.leaveTimer);
-      state.leaveTimer = null;
-    }
-    if (!state.idleTimer) {
-      state.idleTimer = setTimeout(() => onIdleTimer(container), IDLE_HIDE_MS);
-    }
-    if (!state.visible) {
-      state.visible = true;
-      updateControllerPosition(video, container);
-      container.classList.add('vsp-visible');
-      startPositionLoop();
-    }
-  }
-
-  function onIdleTimer(container) {
-    const state = container._state;
-    state.idleTimer = null;
-    const dragging = dragState.isDragging && dragState.currentContainer === container;
-    const remaining = dragging ? IDLE_HIDE_MS : IDLE_HIDE_MS - (Date.now() - state.lastActive);
-    if (remaining > 0) {
-      state.idleTimer = setTimeout(() => onIdleTimer(container), remaining);
-    } else {
-      hideController(container);
-    }
-  }
-
-  function hideController(container) {
-    const state = container._state;
-    if (state.idleTimer) {
-      clearTimeout(state.idleTimer);
-      state.idleTimer = null;
-    }
-    if (state.leaveTimer) {
-      clearTimeout(state.leaveTimer);
-      state.leaveTimer = null;
-    }
-    if (!state.visible) return;
-    state.visible = false;
-    container.classList.remove('vsp-visible');
-    closeSpeedDial(container);
-  }
+  window.addEventListener('pointermove', revealControllerUnderPointer, { capture: true, passive: true });
 
   function setupDraggable(container, video) {
-    container.addEventListener('mousedown', (e) => {
+    container.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
       if (e.target.closest('.vsp-button') ||
           e.target.closest('.vsp-toggle-button') ||
           e.target.closest('.vsp-settings-button') ||
-          e.target.closest('.vsp-current-speed') ||
-          e.target.closest('.vsp-speed-dial')) {
+          e.target.closest('.vsp-current-speed')) {
         return;
       }
 
@@ -638,12 +587,18 @@
       dragState.initialLeft = savedOffset.x;
       dragState.initialTop = savedOffset.y;
 
+      activeVideo = video;
       container.classList.add('vsp-dragging');
+      try {
+        container.setPointerCapture?.(e.pointerId);
+      } catch (err) {
+        // The pointer is no longer active. The drag still works without capture.
+      }
       e.preventDefault();
     });
   }
 
-  function handleDragMove(e) {
+  function handlePointerMove(e) {
     if (!dragState.isDragging || !dragState.currentContainer || !dragState.currentVideo) return;
 
     const deltaX = e.clientX - dragState.startX;
@@ -671,27 +626,29 @@
     container.style.top = `${videoRect.top + newOffsetY}px`;
   }
 
-  function handleMouseUp() {
+  function handlePointerUp() {
     if (dragState.isDragging && dragState.currentContainer) {
-      dragState.currentContainer.classList.remove('vsp-dragging');
+      const container = dragState.currentContainer;
+      container.classList.remove('vsp-dragging');
 
       chrome.storage.sync.set({ controllerOffset: { x: savedOffset.x, y: savedOffset.y } });
 
       dragState.isDragging = false;
       dragState.currentContainer = null;
       dragState.currentVideo = null;
+
+      if (!container.matches(':hover')) {
+        container.classList.remove('vsp-visible');
+      }
     }
   }
 
-  // Capture phase, so a page that stops these events cannot break the
-  // controller.
-  window.addEventListener('mousemove', (e) => {
-    handleDragMove(e);
-    onPointerMove(e);
-  }, { capture: true, passive: true });
-  window.addEventListener('mouseup', handleMouseUp, true);
+  document.addEventListener('pointermove', handlePointerMove);
+  document.addEventListener('pointerup', handlePointerUp);
+  document.addEventListener('pointercancel', handlePointerUp);
 
   function setVideoSpeed(video, speed, container) {
+    activeVideo = video;
     video.playbackRate = speed;
     updateActiveButton(container, speed);
     showSpeedOSD(video, speed);
@@ -739,9 +696,11 @@
     const buttons = container.querySelectorAll('.vsp-button');
     buttons.forEach(button => {
       const speed = parseFloat(button.getAttribute('data-speed'));
-      const isActive = Math.abs(speed - currentSpeed) < 0.01;
-      button.classList.toggle('vsp-active', isActive);
-      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      if (Math.abs(speed - currentSpeed) < 0.01) {
+        button.classList.add('vsp-active');
+      } else {
+        button.classList.remove('vsp-active');
+      }
     });
   }
 
@@ -749,30 +708,32 @@
     const controller = controllers.get(video);
     if (!controller) return;
 
-    hideController(controller);
-    closeSpeedDial(controller);
-
     if (controller._ratechangeHandler) {
       video.removeEventListener('ratechange', controller._ratechangeHandler);
     }
-    if (dragState.currentContainer === controller) {
-      dragState.isDragging = false;
-      dragState.currentContainer = null;
-      dragState.currentVideo = null;
+    if (controller._cleanupHover) {
+      controller._cleanupHover();
+    }
+    if (controller._resizeObserver) {
+      controller._resizeObserver.disconnect();
     }
 
     controller._host.remove();
     controllers.delete(video);
+
+    if (activeVideo === video) activeVideo = null;
   }
 
   function scanForVideos() {
     const videos = document.querySelectorAll('video');
-
+    
     videos.forEach(video => {
       if (video.readyState >= 1 && !controllers.has(video)) {
         createController(video);
-      } else if (!controllers.has(video)) {
+      } else if (!controllers.has(video) && !videosAwaitingMetadata.has(video)) {
+        videosAwaitingMetadata.add(video);
         video.addEventListener('loadedmetadata', () => {
+          videosAwaitingMetadata.delete(video);
           createController(video);
         }, { once: true });
       }
@@ -786,12 +747,48 @@
   }
 
   const observer = new MutationObserver(() => {
-    try {
-      scanForVideos();
-    } catch (e) {
-      console.warn('VSP: Error scanning for videos:', e);
-    }
+    scheduleVideoScan();
   });
+
+  function scheduleVideoScan() {
+    if (scanScheduled) return;
+    scanScheduled = true;
+    requestAnimationFrame(() => {
+      scanScheduled = false;
+      try {
+        scanForVideos();
+      } catch (e) {
+        console.warn('VSP: Error scanning for videos:', e);
+      }
+    });
+  }
+
+  function getTargetController() {
+    if (activeVideo && controllers.has(activeVideo) && document.contains(activeVideo)) {
+      return { video: activeVideo, container: controllers.get(activeVideo) };
+    }
+
+    for (const [video, container] of controllers) {
+      if (document.contains(video) && container.classList.contains('vsp-visible')) {
+        return { video, container };
+      }
+    }
+
+    for (const [video, container] of controllers) {
+      if (document.contains(video)) return { video, container };
+    }
+    return null;
+  }
+
+  function cleanUp() {
+    try {
+      observer.disconnect();
+      if (positionRAF) cancelAnimationFrame(positionRAF);
+      controllers.forEach((container, video) => removeController(video));
+    } catch (e) {
+      // The document may already be unloading.
+    }
+  }
 
   function startObserver() {
     try {
@@ -826,15 +823,9 @@
     const key = e.key.toLowerCase();
     if (key !== 's' && key !== 'd' && key !== 'r') return;
 
-    let targetVideo = null;
-    let targetContainer = null;
-    controllers.forEach((container, video) => {
-      if (!targetVideo && document.contains(video)) {
-        targetVideo = video;
-        targetContainer = container;
-      }
-    });
-    if (!targetVideo || !targetContainer) return;
+    const target = getTargetController();
+    if (!target) return;
+    const { video: targetVideo, container: targetContainer } = target;
 
     e.preventDefault();
 
@@ -887,28 +878,24 @@
         }
       });
     }
+    schedulePositionUpdate();
   });
 
   // Message listener for popup communication
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'setSpeed') {
-      controllers.forEach((container, video) => {
-        if (document.contains(video)) {
-          setVideoSpeed(video, message.speed, container);
-        }
-      });
-      sendResponse({ success: true });
+      const target = getTargetController();
+      if (target) setVideoSpeed(target.video, message.speed, target.container);
+      sendResponse({ success: true, appliedToVideo: Boolean(target) });
     } else if (message.action === 'getSpeed') {
-      let speed = preferredSpeed;
-      controllers.forEach((container, video) => {
-        if (document.contains(video)) {
-          speed = video.playbackRate;
-        }
+      const target = getTargetController();
+      sendResponse({
+        speed: target ? target.video.playbackRate : preferredSpeed,
+        hasVideo: Boolean(target)
       });
-      sendResponse({ speed: speed });
     } else if (message.action === 'setMinimized') {
       isMinimized = message.isMinimized;
-      controllers.forEach(applyMinimizedState);
+      controllers.forEach((container) => applyMinimizedState(container));
       sendResponse({ success: true });
     }
     return true;
@@ -916,6 +903,7 @@
 
   startObserver();
   scanForVideos();
+  window.addEventListener('pagehide', cleanUp, { once: true });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
