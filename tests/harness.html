@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video Speed Presets - test harness</title>
+  <style>
+    body { margin: 0; background: #f4f4f4; font-family: Georgia, serif; }
+    .wrap { width: 640px; margin: 60px 0 0 60px; }
+    video { width: 640px; height: 360px; display: block; background: #000; }
+    .spacer { height: 1200px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <video id="v" muted src="clip.mp4"></video>
+    <input id="txt" placeholder="text field">
+    <div class="spacer"></div>
+  </div>
+  <script>
+    // Load everything fresh on each visit, in manifest order, so that the
+    // browser cache cannot serve an old copy of a file.
+    (async function () {
+      const fresh = (url) => url + '?t=' + Date.now();
+      const loadScript = (url) => new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = fresh(url);
+        s.onload = resolve;
+        s.onerror = reject;
+        document.body.appendChild(s);
+      });
+      await loadScript('chrome-stub.js');
+      await loadScript('defects.test.js');
+      const manifest = await (await fetch(fresh('../extension/manifest.json'), { cache: 'no-store' })).json();
+      const entry = manifest.content_scripts[0];
+      for (const css of entry.css || []) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = fresh('../extension/' + css);
+        document.head.appendChild(link);
+      }
+      for (const js of entry.js) {
+        await loadScript('../extension/' + js);
+      }
+      window.__vspLoaded = true;
+    })();
+  </script>
+</body>
+</html>

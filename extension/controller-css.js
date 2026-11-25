@@ -1,14 +1,53 @@
+// Styles for the on-video controller, the settings window and the speed
+// display. Each of these lives in a shadow root, so page styles cannot
+// reach them. content.js adds this text to each shadow root.
+const VSP_STYLES = `
+/* The host element sits in the page. It is an empty box that page styles
+   cannot change: !important rules in a shadow tree win over page rules. */
+:host {
+  all: initial !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  z-index: 2147483647 !important;
+  pointer-events: none !important;
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid rgba(150, 190, 255, 1);
+  outline-offset: 2px;
+}
+
+/* A hidden controller has visibility: hidden, so it cannot take clicks or
+   keyboard focus. */
 .vsp-controller {
   position: fixed;
-  z-index: 2147483647;
+  left: 0;
+  top: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0s linear 0.2s;
 }
 
 .vsp-controller.vsp-visible {
   opacity: 1;
+  visibility: visible;
+  transition: opacity 0.2s ease, visibility 0s;
+}
+
+/* Clicks stop at once when the controller starts to fade out. */
+.vsp-controller:not(.vsp-visible) * {
+  pointer-events: none;
 }
 
 .vsp-buttons {
@@ -72,7 +111,6 @@
   cursor: pointer;
   transition: all 0.15s ease;
   user-select: none;
-  outline: none;
   min-width: 42px;
   text-align: center;
 }
@@ -110,6 +148,10 @@
 
 .vsp-current-speed {
   display: none;
+  box-sizing: content-box;
+  margin: 0;
+  background: transparent;
+  border: none;
   color: #ffffff;
   font-size: 12px;
   font-weight: 600;
@@ -127,7 +169,6 @@
   border-radius: 4px;
   cursor: pointer;
   user-select: none;
-  outline: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -212,7 +253,6 @@
   border-radius: 4px;
   cursor: pointer;
   user-select: none;
-  outline: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -294,7 +334,6 @@
   cursor: pointer;
   transition: all 0.1s ease;
   user-select: none;
-  outline: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   min-width: 60px;
 }
@@ -326,7 +365,7 @@
   bottom: 0;
   background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(4px);
-  z-index: 2147483646;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -343,7 +382,8 @@
   background: rgba(30, 30, 30, 0.95);
   border-radius: 12px;
   padding: 24px;
-  max-width: 400px;
+  box-sizing: border-box;
+  max-width: 450px;
   width: 90%;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -425,7 +465,6 @@
   font-weight: 500;
   cursor: pointer;
   border: none;
-  outline: none;
   transition: all 0.15s ease;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
 }
@@ -471,7 +510,6 @@
 
 .vsp-osd {
   position: fixed;
-  z-index: 2147483647;
   transform: translate(-50%, -50%);
   background: rgba(0, 0, 0, 0.7);
   color: #ffffff;
@@ -488,3 +526,4 @@
 .vsp-osd-fade {
   opacity: 0;
 }
+`;
